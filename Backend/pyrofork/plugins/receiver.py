@@ -1,0 +1,483 @@
+from asyncio import Lock, Queue, create_task
+from asyncio import sleep as asleep
+
+from pyrogram import Client, filters
+from pyrogram.enums.parse_mode import ParseMode
+from pyrogram.errors import FloodWait
+from pyrogram.types import Message
+
+import Backend
+from Backend import db
+from Backend.helper.announcer import announce_new_media
+from Backend.helper.auto_catalog import start_single_media_catalog_sync
+from Backend.helper.encrypt import encode_string
+from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
+from Backend.helper.requests_manager import auto_fulfill
+from Backend.helper.metadata import extract_default_id, metadata
+from Backend.helper.metadata.parse import resolution_from_dimensions
+from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
+from Backend.helper.split_files import parse_split_info
+from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
+from Backend.helper.task_manager import delete_message
+from Backend.logger import LOGGER
+
+file_queue = Queue()
+db_lock = Lock()
+manual_session_lock = Lock()
+
+
+#----- True when the message carries a streamable video or a split-archive part
+def _is_supported_media(message: Message) -> bool:
+    if message.video:
+        return True
+    if message.document:
+        mime_type = message.document.mime_type or ""
+        if mime_type.startswith("video/"):
+            return True
+        candidate = message.caption or message.document.file_name or ""
+        if parse_split_info(candidate):
+            return True
+        # Single (non-split) STORED zip archives containing a video
+        name = (message.document.file_name or candidate or "").lower()
+        if name.endswith(".zip") and not parse_split_info(name):
+            return True
+    return False
+
+
+#----- True when a chat id belongs to an authorized channel or group
+def _is_auth_channel(chat_id) -> bool:
+    target = str(chat_id).replace("-100", "")
+    return any(str(c).strip().replace("-100", "") == target for c in SettingsManager.current().auth_channels)
+
+
+#----- True when a chat id belongs to a manual channel (files added by hand, not auto-indexed)
+def _is_manual_channel(chat_id) -> bool:
+    target = str(chat_id).replace("-100", "")
+    return any(str(c).strip().replace("-100", "") == target for c in SettingsManager.current().manual_channels)
+
+
+#----- Common message field extraction shared by the channel handlers
+def _extract_fields(message: Message):
+    file = message.video or message.document
+    title = message.caption or file.file_name
+    channel = str(message.chat.id).replace("-100", "")
+    return file, title, message.id, file.file_size, get_readable_file_size(file.file_size), channel
+
+
+#----- Strip URLs/part suffix from a title and ensure a video extension
+def _finalize_title(title: str, metadata_info: dict) -> str:
+    return finalize_media_name(title, bool(metadata_info.get('group_key')))
+
+
+#----- Serialize DB inserts from the queue and trigger catalog sync
+async def process_file():
+    while True:
+        metadata_info, channel, msg_id, size, raw_size, title = await file_queue.get()
+        insert_status: dict = {}
+        async with db_lock:
+            updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, raw_size=raw_size, name=title, status=insert_status)
+            if updated_id:
+                LOGGER.info(f"{metadata_info['media_type']} updated with ID: {updated_id}")
+            else:
+                LOGGER.info("Update failed due to validation errors.")
+
+        if updated_id and insert_status.get("duplicate_skipped"):
+            LOGGER.info(f"Duplicate protection: deleting duplicate message {msg_id} from channel {channel}.")
+            create_task(delete_message(int(f"-100{channel}"), msg_id))
+            file_queue.task_done()
+            continue
+
+        if updated_id:
+            start_single_media_catalog_sync(
+                db,
+                tmdb_id=metadata_info.get("tmdb_id"),
+                media_type=metadata_info.get("media_type"),
+            )
+            announce_new_media(metadata_info)
+            create_task(auto_fulfill(
+                tmdb_id=metadata_info.get("tmdb_id"),
+                imdb_id=metadata_info.get("imdb_id"),
+                media_type=metadata_info.get("media_type"),
+            ))
+        file_queue.task_done()
+
+
+_process_file_task = None
+
+def _ensure_process_file():
+    global _process_file_task
+    try:
+        loop = asyncio.get_running_loop()
+        if loop and loop.is_running():
+            if _process_file_task is None or _process_file_task.done():
+                _process_file_task = loop.create_task(process_file())
+    except (RuntimeError, Exception):
+        pass
+
+_ensure_process_file()
+
+
+#----- Build a title-level metadata base from an existing media document
+def _base_from_doc(doc: dict) -> dict:
+    return {
+        "tmdb_id": doc.get("tmdb_id"),
+        "imdb_id": doc.get("imdb_id"),
+        "title": doc.get("title") or "",
+        "year": doc.get("release_year") or 0,
+        "rate": doc.get("rating") or 0,
+        "description": doc.get("description") or "",
+        "poster": doc.get("poster") or "",
+        "backdrop": doc.get("backdrop") or "",
+        "logo": doc.get("logo") or "",
+        "genres": doc.get("genres") or [],
+        "cast": doc.get("cast") or [],
+        "runtime": str(doc.get("runtime") or ""),
+        "original_language": doc.get("original_language"),
+        "origin_country": doc.get("origin_country") or [],
+    }
+
+
+#----- Highest existing episode number in a season, or 0 if none
+def _max_episode(doc: dict, season_number: int) -> int:
+    for season in doc.get("seasons", []) or []:
+        if season.get("season_number") == season_number:
+            eps = [e.get("episode_number", 0) for e in season.get("episodes", []) or []]
+            return max(eps) if eps else 0
+    return 0
+
+
+async def _handle_personal_session(client: Client, message: Message) -> None:
+    session = Backend.MANUAL_SESSION
+    if not session:
+        return
+    async with manual_session_lock:
+        channel = str(message.chat.id).replace("-100", "")
+        try:
+            resolved = await resolve_telegram_message(client, chat_id=channel, msg_id=message.id)
+        except Exception as e:
+            LOGGER.warning(f"[Manual Session] Could not resolve message {message.id}: {e}")
+            return
+
+        tmdb_id = session["tmdb_id"]
+        media_type = session["media_type"]
+        location = await db.find_media_doc(media_type, tmdb_id)
+        if not location:
+            LOGGER.warning(f"[Manual Session] Target id {tmdb_id} not found; ignoring file.")
+            return
+        doc = location[0]
+
+        p_channel = int(resolved["chat_id"])
+        p_msg = int(resolved["msg_id"])
+        encoded = await encode_string({"chat_id": p_channel, "msg_id": p_msg})
+        name = resolved["name"]
+        quality = resolved.get("quality") or session.get("quality") or "HD"
+
+        split_key = resolved.get("split_key")
+        metadata_info = _base_from_doc(doc)
+        metadata_info.update({
+            "media_type": media_type,
+            "quality": quality,
+            "encoded_string": encoded,
+            "group_key": f"{channel}:{quality}:{split_key}" if split_key else None,
+            "part_number": resolved.get("part_number"),
+            "is_anime": bool(doc.get("is_anime")),
+        })
+
+        if media_type == "tv":
+            season_number = session["season"]
+            episode_number = session["episode"]
+            if episode_number is None:
+                episode_number = _max_episode(doc, season_number) + 1
+            thumb_url = ""
+            if resolved.get("has_thumb"):
+                thumb_url = f"/thumb/{encoded}"
+            metadata_info.update({
+                "season_number": season_number,
+                "episode_number": episode_number,
+                "episode_title": f"S{season_number:02d}E{episode_number:02d}",
+                "episode_backdrop": thumb_url or metadata_info.get("backdrop") or "",
+                "episode_overview": "",
+                "episode_released": "",
+            })
+
+        async with db_lock:
+            updated_id = await db.insert_media(
+                metadata_info, channel=p_channel, msg_id=p_msg,
+                size=resolved["size"], name=name, raw_size=int(resolved.get("raw_size") or 0),
+            )
+
+        if updated_id:
+            where = (f"S{metadata_info['season_number']:02d}E{metadata_info['episode_number']:02d} "
+                     if media_type == "tv" else "")
+            LOGGER.info(f"[Manual Session] Added {quality} {where}to '{metadata_info.get('title')}' (id {tmdb_id}).")
+            create_task(stamp_caption_with_id(message, metadata_info))
+        else:
+            LOGGER.warning(f"[Manual Session] Insert failed for message {message.id}.")
+
+
+#----- Ingest new channel/group media into the queue after building metadata
+@Client.on_message((filters.channel | filters.group) & (filters.document | filters.video))
+async def file_receive_handler(client: Client, message: Message):
+    _ensure_process_file()
+    if is_skip_channel(message):
+        return
+
+    session = Backend.MANUAL_SESSION
+    is_manual = _is_manual_channel(message.chat.id)
+
+    #----- Manual channel + personal session: add straight onto the personal title
+    if is_manual and session and session.get("kind") == "personal":
+        await _handle_personal_session(client, message)
+        return
+
+    #----- Manual channel otherwise only proceeds during a real (TMDB/IMDb) session;
+    #----- real files are parsed from their name/caption and forced onto the session id.
+    if is_manual:
+        if not (session and session.get("kind") == "real"):
+            return
+    elif not _is_auth_channel(message.chat.id):
+        await message.reply_text("> Channel is not in AUTH_CHANNEL")
+        return
+
+    is_real_session = bool(session and session.get("kind") == "real")
+    override_id = session["default_id"] if is_real_session else None
+    season_hint = session.get("season") if is_real_session else None
+    try:
+        sub_name = (message.document.file_name if message.document else "") or ""
+        if sub_name and is_subtitle_file(sub_name):
+            channel = str(message.chat.id).replace("-100", "")
+            create_task(ingest_subtitle(sub_name, int(channel), message.id))
+            return
+
+        if not _is_supported_media(message):
+            await message.reply_text("> Not supported")
+            return
+
+        _, title, msg_id, raw_size, size, channel = _extract_fields(message)
+        file = message.video or message.document
+
+        quality_hint = None
+        if message.video:
+            w = getattr(message.video, "width", 0) or 0
+            h = getattr(message.video, "height", 0) or 0
+            quality_hint = resolution_from_dimensions(w, h)
+        elif message.animation:
+            w = getattr(message.animation, "width", 0) or 0
+            h = getattr(message.animation, "height", 0) or 0
+            quality_hint = resolution_from_dimensions(w, h)
+
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(message.caption or ""), season_hint=season_hint, quality_hint=quality_hint)
+        # Fallback to raw file_name if caption was used as title and metadata failed
+        if metadata_info is None and message.caption and getattr(file, "file_name", None):
+            raw_fn = getattr(file, "file_name", None)
+            if raw_fn and raw_fn != message.caption:
+                metadata_info = await metadata(clean_filename(raw_fn), int(channel), msg_id, override_id=override_id or extract_default_id(message.caption or ""), season_hint=season_hint, quality_hint=quality_hint)
+                if metadata_info is not None:
+                    title = raw_fn
+
+        if metadata_info is None:
+            LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
+            await route_to_skip_channel(client, message)
+            return
+
+        title = _finalize_title(title, metadata_info)
+
+        await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
+
+        if is_real_session:
+            create_task(stamp_caption_with_id(message, metadata_info))
+    except FloodWait as e:
+        LOGGER.info(f"Sleeping for {str(e.value)}s")
+        await asleep(e.value)
+        await message.reply_text(
+            text=f"Got Floodwait of {str(e.value)}s",
+            disable_web_page_preview=True,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+
+def _override_matches_indexed(override_id: str, imdb_id, tmdb_id) -> bool:
+    oid = str(override_id).strip().lower()
+    if oid.startswith("tt"):
+        return bool(imdb_id) and oid == str(imdb_id).strip().lower()
+    if oid.isdigit():
+        return tmdb_id not in (None, "") and oid == str(tmdb_id).strip()
+    return False
+
+
+#----- Re-index an edited channel/group file only when it carries an override ID
+@Client.on_edited_message((filters.channel | filters.group) & (filters.document | filters.video))
+async def file_edited_handler(client: Client, message: Message):
+    if not _is_auth_channel(message.chat.id):
+        return
+    try:
+        if not _is_supported_media(message):
+            return
+
+        _, title, msg_id, raw_size, size, channel = _extract_fields(message)
+        override_id = extract_default_id(message.caption) if message.caption else None
+        if not override_id:
+            return
+
+        existing_ids = await db.get_media_ids_by_part(int(channel), msg_id)
+        if existing_ids and _override_matches_indexed(override_id, existing_ids[0], existing_ids[1]):
+            return
+
+        LOGGER.info(f"Detected override ID '{override_id}' in edited message {msg_id}")
+        await db.remove_media_part(int(channel), msg_id)
+
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id)
+        if metadata_info is None:
+            LOGGER.warning(f"Metadata failed for edited file: {title} (ID: {msg_id})")
+            return
+
+        title = _finalize_title(title, metadata_info)
+        await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
+    except Exception as e:
+        LOGGER.error(f"Error handling edited generic file {message.id}: {e}")
+
+
+#----- Purge database entries for messages deleted from auth channels/groups
+@Client.on_deleted_messages(filters.channel | filters.group)
+async def file_deleted_handler(client: Client, messages: list[Message]):
+    try:
+        for message in messages:
+            if not message.chat:
+                continue
+            if not (_is_auth_channel(message.chat.id) or _is_manual_channel(message.chat.id)):
+                continue
+            channel = str(message.chat.id).replace("-100", "")
+            msg_id = message.id
+            try:
+                if await db.remove_media_part(int(channel), msg_id):
+                    LOGGER.info(f"Automatically purged deleted message {msg_id} from database.")
+                if await remove_subtitle(int(channel), msg_id):
+                    LOGGER.info(f"Automatically purged deleted subtitle {msg_id} from database.")
+            except Exception as ex:
+                LOGGER.error(f"Failed to scrub deleted message {msg_id}: {ex}")
+    except Exception as e:
+        LOGGER.error(f"Error handling deleted messages: {e}")
+
+
+#----- /scan_files <start>-<end> or /scan_files <channel> <start>-<end>
+@Client.on_message(filters.command(["scan_files", "scanfiles"]) & filters.private, group=11)
+async def scan_files_cmd(client: Client, message: Message):
+    try:
+        from Backend.config import Telegram
+        import re
+        user_id = (message.from_user.id if message.from_user else None) or message.chat.id
+        if user_id != Telegram.OWNER_ID:
+            return
+
+        text = message.text or ""
+        parts = text.split()[1:]
+        if not parts:
+            await message.reply_text(
+                "ℹ️ <b>Targeted Range Scanner Usage:</b>\n\n"
+                "• <code>/scan_files 100-150</code> (scans msg 100 to 150 in default channel)\n"
+                "• <code>/scan_files -1004386493465 100-150</code> (scans specific channel)\n"
+                "• <code>/scan_files 1829</code> (scans a single message)",
+                parse_mode=ParseMode.HTML,
+                quote=True,
+            )
+            return
+
+        channel = None
+        range_spec = None
+        if len(parts) >= 2 and (parts[0].startswith("-100") or parts[0].isdigit() or parts[0].startswith("-")):
+            channel = parts[0]
+            range_spec = parts[1]
+        else:
+            range_spec = parts[0]
+            auth_chans = SettingsManager.current().auth_channels
+            channel = auth_chans[0] if auth_chans else None
+
+        if not channel:
+            await message.reply_text("❌ No auth channels configured to scan.", quote=True)
+            return
+
+        m = re.match(r"^(\d+)\s*[-_:]\s*(\d+)$", range_spec.strip())
+        if m:
+            start_id, end_id = int(m.group(1)), int(m.group(2))
+        elif range_spec.strip().isdigit():
+            start_id = end_id = int(range_spec.strip())
+        else:
+            await message.reply_text(f"❌ Invalid range format '{range_spec}'. Use e.g. <code>100-150</code>", parse_mode=ParseMode.HTML, quote=True)
+            return
+
+        from Backend.helper.scan_manager import scan_manager
+        status_msg = await message.reply_text(
+            f"🚀 <b>Starting Targeted Scan...</b>\n"
+            f"📺 Channel: <code>{channel}</code>\n"
+            f"📑 Messages: <code>{start_id} – {end_id}</code> ({end_id - start_id + 1} items)",
+            parse_mode=ParseMode.HTML,
+            quote=True
+        )
+
+        res = await scan_manager.start_range(client, channel, start_id, end_id, mode="scan")
+        if not res.get("ok"):
+            await status_msg.edit_text(f"❌ {res.get('message')}")
+            return
+
+        while True:
+            await asleep(3)
+            st = scan_manager.get_status()
+            if st.get("status") in ("completed", "cancelled", "error", "idle"):
+                c = st.get("counters", {})
+                await status_msg.edit_text(
+                    f"✅ <b>Targeted Scan Complete!</b>\n\n"
+                    f"📊 <b>Results:</b>\n"
+                    f"• Processed: <b>{c.get('processed', 0)}</b>\n"
+                    f"• Indexed: <b>{c.get('indexed', 0)}</b>\n"
+                    f"• Duplicate Skips: <b>{c.get('skipped_dup', 0)}</b>\n"
+                    f"• Non-Video: <b>{c.get('skipped_nonvid', 0)}</b>\n"
+                    f"• Errors: <b>{c.get('errors', 0)}</b>",
+                    parse_mode=ParseMode.HTML
+                )
+                break
+    except Exception as e:
+        LOGGER.error(f"Error in /scan_files: {e}")
+        await message.reply_text(f"⚠️ Error: {e}", quote=True)
+
+
+#----- /tidy: prune dead streams and clean up orphan documents from MongoDB
+@Client.on_message(filters.command("tidy") & filters.private, group=11)
+async def tidy_cmd(client: Client, message: Message):
+    try:
+        from Backend.config import Telegram
+        user_id = (message.from_user.id if message.from_user else None) or message.chat.id
+        if user_id != Telegram.OWNER_ID:
+            return
+
+        from Backend.helper.scan_manager import dbcheck_manager
+        status_msg = await message.reply_text(
+            "🧹 <b>Starting Database Tidy & Dead Link Check...</b>\n"
+            "Checking all indexed streams against Telegram...",
+            parse_mode=ParseMode.HTML,
+            quote=True
+        )
+
+        res = await dbcheck_manager.start(client)
+        if not res.get("ok"):
+            await status_msg.edit_text(f"❌ {res.get('message')}")
+            return
+
+        while True:
+            await asleep(3)
+            st = dbcheck_manager.get_status()
+            if st.get("status") in ("completed", "cancelled", "error", "idle"):
+                c = st.get("counters", {})
+                await status_msg.edit_text(
+                    f"✨ <b>Database Tidy Complete!</b>\n\n"
+                    f"• Streams Checked: <b>{c.get('checked_streams', 0)}</b>\n"
+                    f"• Dead Streams Pruned: <b>{c.get('dead_streams', 0)}</b>\n"
+                    f"• Orphan Docs Removed: <b>{c.get('empty_docs_removed', 0)}</b>",
+                    parse_mode=ParseMode.HTML
+                )
+                break
+    except Exception as e:
+        LOGGER.error(f"Error in /tidy: {e}")
+        await message.reply_text(f"⚠️ Error: {e}", quote=True)
+

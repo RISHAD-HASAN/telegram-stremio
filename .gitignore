@@ -1,0 +1,23 @@
+# Python & Virtual Env
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+.pytest_cache/
+
+# Runtime / Secrets / Configs
+config.env
+*.session
+*.session-journal
+*.session-shm
+*.session-wal
+.season2mpv_config.json
+log.txt
+media/
+*.strm
+
+# IDEs & Scratch
+.vscode/
+.idea/
+test.py

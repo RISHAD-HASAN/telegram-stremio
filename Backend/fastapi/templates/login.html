@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Sign in - Telegram Stremio{% endblock %}
+
+{% block content %}
+<div class="min-h-[calc(100dvh-4rem)] grid place-items-center">
+    <div class="w-full max-w-sm">
+        <div class="flex items-center gap-3 mb-8">
+            <span class="grid place-items-center w-11 h-11 rounded-[14px] bg-primary text-on-primary"><i class="fa-solid fa-play text-sm"></i></span>
+            <div>
+                <p class="text-lg font-semibold leading-tight">TG Stremio</p>
+                <p class="text-sm text-text-secondary">Admin console</p>
+            </div>
+        </div>
+
+        <div class="glass-panel p-6 sm:p-7">
+            <h1 class="text-xl font-semibold">Sign in</h1>
+            <p class="text-sm text-text-secondary mt-1 mb-6">Use the admin account set in Settings.</p>
+
+            {% if error %}
+            <div class="flex items-center gap-2.5 text-sm text-danger bg-danger/10 border border-danger/25 px-3.5 py-2.5 rounded-[14px] mb-5" role="alert">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <span>{{ error }}</span>
+            </div>
+            {% endif %}
+
+            <form method="post" class="space-y-4">
+                <label class="block">
+                    <span class="label-caps block mb-1.5">Username</span>
+                    <input type="text" name="username" required autocomplete="username" autocapitalize="none" spellcheck="false"
+                        class="field px-4 py-3 text-[15px]" placeholder="admin">
+                </label>
+                <label class="block">
+                    <span class="label-caps block mb-1.5">Password</span>
+                    <span class="relative block">
+                        <input type="password" id="password" name="password" required autocomplete="current-password"
+                            class="field pl-4 pr-12 py-3 text-[15px]" placeholder="••••••••">
+                        <button type="button" onclick="togglePassword()" aria-label="Show password"
+                            class="icon-btn absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10">
+                            <i id="eyeIcon" class="fa-solid fa-eye text-sm"></i>
+                        </button>
+                    </span>
+                </label>
+                <button type="submit" class="btn-primary w-full py-3 mt-2 text-[15px]">
+                    Sign in <i class="fa-solid fa-arrow-right text-sm"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function togglePassword() {
+    const input = document.getElementById('password');
+    const icon = document.getElementById('eyeIcon');
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    icon.classList.toggle('fa-eye', !show);
+    icon.classList.toggle('fa-eye-slash', show);
+}
+</script>
+{% endblock %}

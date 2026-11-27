@@ -1,0 +1,2466 @@
+{% extends "base.html" %}
+{% block title %}Tools — TG Stremio{% endblock %}
+
+{% block content %}
+
+<style>
+.tool-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.35rem 1.5rem;
+}
+.tool-card h2 i { color: var(--primary); font-size: .95rem; }
+.tool-card h2 {
+    font-size: 1.05rem; font-weight: 600;
+    color: var(--text); margin-bottom: 1rem;
+    display: flex; align-items: center; gap: 0.5rem;
+}
+.s-label {
+    display: block; font-size: 0.72rem; font-weight: 500;
+    color: var(--text-sec); text-transform: uppercase;
+    letter-spacing: 0.1em; margin-bottom: 0.5rem;
+}
+.btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.6rem 1.25rem; border-radius: 9999px;
+    font-size: 0.88rem; font-weight: 500; cursor: pointer;
+    border: 1px solid transparent; transition: all 0.15s; white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: var(--on-primary); }
+.btn-danger  { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: color-mix(in srgb, var(--danger) 30%, transparent); color: var(--danger); }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 25%, transparent); }
+.btn-ghost   { background: transparent; border-color: var(--border); color: var(--text); }
+.btn-ghost:hover:not(:disabled) { background: var(--card-high); }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn-warning { background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--warn); }
+.btn-warning:hover:not(:disabled) { background: color-mix(in srgb, var(--warn) 28%, transparent); }
+
+/* channel chips */
+.chip-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 240px; overflow-y: auto; }
+.chip {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.7rem 1rem; border-radius: 0.9rem;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.chip:hover { border-color: var(--primary); }
+.chip.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.chip input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); }
+.chip .c-name { font-weight: 600; font-size: 0.9rem; }
+.chip .c-id { font-size: 0.72rem; color: var(--text-sec); }
+
+/* progress */
+.progress-track {
+    width: 100%; height: 0.4rem; border-radius: 9999px;
+    background: var(--card-high);
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%; border-radius: 9999px; background: var(--primary);
+    width: 0%; transition: width 0.4s ease;
+}
+.progress-fill.indeterminate {
+    width: 35% !important;
+    animation: indet 1.2s ease-in-out infinite;
+}
+@keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 0.75rem; }
+.stat-box {
+    background: var(--bg);
+    border: 1px solid var(--border); border-radius: 0.9rem;
+    padding: 0.75rem 0.9rem;
+}
+.stat-box .v { font-size: 1.3rem; font-weight: 600; }
+.stat-box .l { font-size: 0.8rem; color: var(--text-sec); }
+
+.status-pill {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.25rem 0.8rem; border-radius: 9999px;
+    font-size: 0.75rem; font-weight: 500;
+}
+.status-idle      { background: color-mix(in srgb,var(--text-sec) 15%,transparent); color: var(--text-sec); }
+.status-running   { background: color-mix(in srgb, var(--ok) 15%, transparent);  color: var(--ok); }
+.status-paused    { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+.status-cancelled { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+.status-completed { background: color-mix(in srgb, var(--ok) 15%, transparent);  color: var(--ok); }
+.status-error     { background: color-mix(in srgb, var(--danger) 15%, transparent);  color: var(--danger); }
+
+.dead-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    padding: 0.6rem 0.9rem; border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background: var(--bg);
+}
+.dead-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 320px; overflow-y: auto; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+.hint { font-size: 0.78rem; color: var(--text-sec); }
+
+.ba-cell { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; font-size: 0.75rem; }
+.ba-ok { color: var(--ok); }
+.ba-no { color: var(--danger); }
+.ba-warn { color: var(--warn); }
+.ba-muted { color: var(--text-sec); }
+.ba-locked { opacity: 0.6; }
+.ba-roles { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
+.ba-role {
+    font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 0.05rem 0.4rem; border-radius: 9999px;
+    background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary);
+}
+.ba-bot-chip input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); flex-shrink: 0; }
+
+.ba-ch-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.ba-ch-card {
+    border: 1px solid var(--border); border-radius: 0.9rem;
+    padding: 0.85rem 1rem; background: var(--bg);
+}
+.ba-ch-card.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.ba-ch-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.ba-ch-sel { display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; min-width: 0; flex: 1; }
+.ba-ch-sel input { width: 1.15rem; height: 1.15rem; accent-color: var(--primary); flex-shrink: 0; margin-top: 0.15rem; }
+.ba-ch-name { font-weight: 600; font-size: 0.9rem; word-break: break-word; }
+.ba-ch-id { font-size: 0.7rem; color: var(--text-sec); word-break: break-all; }
+.ba-bot-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.4rem 0.9rem; margin-top: 0.7rem;
+}
+.ba-bstat { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; }
+.ba-bstat .n { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ba-res-row {
+    display: flex; flex-direction: column; align-items: stretch; gap: 0.4rem;
+    padding: 0.6rem 0.9rem; border-radius: 0.75rem;
+    border: 1px solid var(--border); background: var(--bg);
+}
+
+@media (max-width: 640px) {
+    .tool-card { padding: 1.1rem 1rem; }
+    .ba-bot-grid { grid-template-columns: 1fr; }
+    #ba-bots .chip { width: 100%; }
+    .ba-actions .btn { width: 100%; justify-content: center; }
+}
+</style>
+
+<header class="page-head">
+    <div>
+        <h1 class="page-title">Tools</h1>
+        <p class="page-sub">Scan, index and maintain your library</p>
+    </div>
+</header>
+
+<div class="space-y-6">
+
+    <!-- ══ Manual Upload Session ═════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-cloud-arrow-up"></i> Manual Upload Session</h2>
+            <span id="ms-status-pill" class="status-pill status-idle">No session</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Pick a title, start a session, then forward files — each one attaches automatically.
+        </p>
+
+        <!-- Active session banner -->
+        <div id="ms-active" class="hidden mb-4" style="border:1px solid color-mix(in srgb, var(--ok) 35%, transparent);background:color-mix(in srgb, var(--ok) 10%, transparent);border-radius:0.9rem;padding:0.9rem 1.1rem">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="min-w-0">
+                    <div class="text-sm font-semibold" id="ms-active-title">—</div>
+                    <div class="hint" id="ms-active-detail"></div>
+                </div>
+                <button class="btn btn-danger" onclick="endManualSession()"><i class="fa-solid fa-stop"></i> End session</button>
+            </div>
+            <p class="hint mt-2" style="color:var(--ok)">
+                <i class="fa-solid fa-circle-check"></i> Session is live — forward the files now, then click <strong>End session</strong> when finished.
+            </p>
+        </div>
+
+        <!-- Setup (hidden while a session is active) -->
+        <div id="ms-setup">
+            <label class="s-label">Find a title (your library, IMDb / Cinemeta or TMDB)</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input id="ms-query" class="flex-1" placeholder="Title (with or without year), IMDb id/link, or TMDB id/link"
+                       style="background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.7rem 1rem;color:var(--text);outline:none"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();searchManualSession();}">
+                <button class="btn btn-primary" onclick="searchManualSession()"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+            </div>
+            <p id="ms-search-state" class="hint mt-2" style="display:none"></p>
+
+            <div id="ms-results" class="chip-list mt-3" style="display:none"></div>
+
+            <!-- Selected + options -->
+            <div id="ms-selected-box" class="hidden mt-4" style="border:1px solid var(--border);border-radius:0.9rem;padding:0.9rem 1.1rem">
+                <div class="flex items-center gap-3">
+                    <img id="ms-sel-poster" src="" alt="" style="width:2.75rem;height:4rem;object-fit:cover;border-radius:0.4rem;flex-shrink:0;background:var(--card)">
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm font-semibold truncate" id="ms-sel-title">—</div>
+                        <div class="hint" id="ms-sel-sub"></div>
+                    </div>
+                </div>
+
+                <!-- Real (TMDB/IMDb) title: metadata read from each file -->
+                <div id="ms-real-note" class="hidden mt-3">
+                    <p class="hint" style="border:1px solid color-mix(in srgb, var(--info) 30%, transparent);background:color-mix(in srgb, var(--info) 8%, transparent);border-radius:0.75rem;padding:0.7rem 0.9rem">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--info)"></i>
+                        Season, episode and quality are read from each file's name/caption automatically.
+                        Forward files to your <strong>auth</strong> or <strong>manual</strong> channel.
+                    </p>
+                    <div id="ms-real-tv-season" class="hidden mt-3">
+                        <label class="s-label">Fallback season (optional)</label>
+                        <input id="ms-real-season" type="number" min="0" placeholder="Only if files have no season, e.g. anime absolute numbers"
+                               style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        <p class="hint mt-2">
+                            <i class="fa-solid fa-circle-info"></i> Leave empty when files already contain <code>S01E05</code>-style numbering.
+                            Set it for absolute-numbered files like <code>One Piece - 1142 (1080p).mkv</code> — the episode (1142)
+                            is read from the name and placed in this season.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Personal title: manual metadata -->
+                <div id="ms-personal-fields" class="hidden mt-3">
+                    <div id="ms-tv-fields" class="hidden grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="s-label">Season <span style="color:var(--danger)">*</span></label>
+                            <input id="ms-season" type="number" min="0" placeholder="e.g. 1"
+                                   style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        </div>
+                        <div>
+                            <label class="s-label">Episode (optional)</label>
+                            <input id="ms-episode" type="number" min="0" placeholder="Empty = next episode"
+                                   style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        </div>
+                        <p class="hint col-span-2" style="margin-top:-0.25rem">
+                            Set an <strong>episode</strong> to pile every forwarded file onto that one episode (multiple qualities).
+                            Leave it <strong>empty</strong> so each file becomes the next episode (E1, E2, E3…).
+                        </p>
+                    </div>
+                    <div class="mt-3">
+                        <label class="s-label">Quality (optional)</label>
+                        <input id="ms-quality" placeholder="Auto-detected from video; fallback HD (e.g. 1080p)"
+                               style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                    </div>
+                    <p class="hint mt-2">
+                        <i class="fa-solid fa-circle-info"></i> Personal files carry no metadata — forward them to your
+                        <strong>manual channel only</strong>.
+                    </p>
+                </div>
+
+                <button class="btn btn-primary mt-3" onclick="startManualSession()"><i class="fa-solid fa-play"></i> Start session</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ══ Channel Scanner ══════════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-satellite-dish"></i> Channel Scanner</h2>
+            <span id="scan-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Index files from your AUTH channels. Scans resume automatically; use Rescan to re-index from scratch.
+        </p>
+
+        <label class="s-label">Select channels</label>
+        <div class="chip-list" id="channel-list">
+            <div class="hint" id="channels-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading channels…</div>
+        </div>
+
+        <div class="flex items-center gap-2 mt-3">
+            <button class="btn btn-ghost" type="button" onclick="selectAllChannels(true)"><i class="fa-solid fa-check-double"></i> Select all</button>
+            <button class="btn btn-ghost" type="button" onclick="selectAllChannels(false)"><i class="fa-solid fa-xmark"></i> Clear</button>
+        </div>
+
+        <hr class="divider">
+
+        <!-- live progress -->
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div class="text-sm font-semibold" id="scan-current">No scan running</div>
+            <div class="text-sm" style="color:var(--text-sec)">
+                <i class="fa-regular fa-clock"></i> <span id="scan-elapsed">0s</span>
+            </div>
+        </div>
+        <div class="progress-track mb-4">
+            <div class="progress-fill" id="scan-bar"></div>
+        </div>
+
+        <div class="stat-grid mb-4">
+            <div class="stat-box"><div class="v" id="sc-processed">0</div><div class="l">Processed</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--ok)" id="sc-indexed">0</div><div class="l">Indexed</div></div>
+            <div class="stat-box"><div class="v" id="sc-dup">0</div><div class="l">Skipped (dup)</div></div>
+            <div class="stat-box"><div class="v" id="sc-meta">0</div><div class="l">Skipped (meta)</div></div>
+            <div class="stat-box"><div class="v" id="sc-nonvid">0</div><div class="l">Non-video</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--info)" id="sc-sub-added">0</div><div class="l">Subtitles added</div></div>
+            <div class="stat-box"><div class="v" id="sc-sub-skipped">0</div><div class="l">Subtitles skipped</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--danger)" id="sc-errors">0</div><div class="l">Errors</div></div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+            <button class="btn btn-primary" id="scan-start-btn" onclick="startScan('scan')">
+                <i class="fa-solid fa-play"></i> <span id="scan-start-label">Start Scan</span>
+            </button>
+            <button class="btn btn-warning" id="rescan-btn" onclick="confirmRescan()">
+                <i class="fa-solid fa-arrows-rotate"></i> Rescan (wipe & re-index)
+            </button>
+            <button class="btn btn-danger" id="scan-cancel-btn" onclick="cancelScan()" disabled>
+                <i class="fa-solid fa-stop"></i> Stop
+            </button>
+            <button class="btn btn-ghost" id="scan-reset-btn" onclick="resetScanState()" title="Reset scan memory, range limits, and channel pointers" style="border: 1px solid var(--border);">
+                <i class="fa-solid fa-rotate-left"></i> Reset Scanner
+            </button>
+        </div>
+
+        <!-- Targeted Range Scanner -->
+        <div style="margin-top: 1.25rem; padding: 1rem; border-radius: 0.9rem; border: 1px dashed var(--border); background: color-mix(in srgb, var(--bg) 40%, transparent);">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="flex items-center gap-2 font-bold text-xs uppercase" style="color:var(--primary);">
+                    <i class="fa-solid fa-crosshairs"></i> Targeted Range Scan
+                </div>
+                <button type="button" onclick="resetRangeInputs()" class="btn-ui btn-ghost text-xs" style="padding:0.2rem 0.6rem;font-size:0.75rem;">
+                    <i class="fa-solid fa-eraser mr-1"></i> Clear Inputs
+                </button>
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) auto; gap: 0.6rem; align-items:center;">
+                <input type="text" id="scan-range-start" placeholder="Start ID or t.me link (e.g. 1829)" style="padding:0.5rem 0.8rem;border-radius:0.6rem;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:0.85rem;">
+                <input type="text" id="scan-range-end" placeholder="End ID or t.me link (e.g. 1855)" style="padding:0.5rem 0.8rem;border-radius:0.6rem;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:0.85rem;">
+                <button class="btn btn-primary" type="button" onclick="startRangeScan()">
+                    <i class="fa-solid fa-bolt"></i> Scan Range
+                </button>
+            </div>
+            <p class="hint mt-2" style="font-size:0.75rem;margin:0.25rem 0 0 0;">Scans only the specified messages in 1-2 seconds without scanning your whole channel.</p>
+        </div>
+
+        <!-- Non-Destructive Multi-Part Stream Consolidator -->
+        <div style="margin-top: 1.25rem; padding: 1rem; border-radius: 0.9rem; border: 1px dashed var(--border); background: color-mix(in srgb, var(--primary) 5%, transparent);">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="flex items-center gap-2 font-bold text-xs uppercase" style="color:var(--primary);">
+                    <i class="fa-solid fa-puzzle-piece"></i> Consolidate Multi-Part Files (Zero Wipe)
+                </div>
+            </div>
+            <p class="hint" style="font-size:0.75rem;margin:0 0 0.75rem 0;">
+                Automatically merges existing <code>part001</code>, <code>part002</code>, <code>Part 1</code>, <code>Part 2</code> files already stored in your database into single <code>(Part 1/4)</code> streams without wiping any of your manual tags, catalogs, or library entries.
+            </p>
+            <button class="btn btn-primary" type="button" id="consolidate-btn" onclick="runConsolidateMultiParts()">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Consolidate Multi-Part Streams
+            </button>
+        </div>
+
+        <p class="hint mt-3" id="scan-error" style="color:var(--danger);display:none"></p>
+    </div>
+
+    <!-- ══ Bot Admin Manager ════════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-user-shield"></i> Bot Admin Manager</h2>
+            <span id="ba-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Promote your bots to admin in the channels they serve, using your session account.
+        </p>
+
+        {% if not userbot_configured or not multi_token_available %}
+        <div style="border:1px solid var(--border);background:color-mix(in srgb,var(--bg) 55%,transparent);border-radius:0.9rem;padding:1rem 1.1rem">
+            <p class="hint" style="margin:0">
+                <i class="fa-solid fa-circle-info"></i>
+                {% if not userbot_configured %}
+                This tool needs a connected <strong>Telegram user session</strong>. Only a user account can
+                promote bots to admin. Connect one from
+                <a href="/admin/settings" style="color:var(--primary)">Settings → Telegram User Session</a>.
+                {% else %}
+                This tool needs <strong>more than one bot token</strong>. Add extra tokens under
+                <a href="/admin/settings" style="color:var(--primary)">Settings → Multi-Token Clients</a> to enable it.
+                {% endif %}
+            </p>
+        </div>
+        {% else %}
+
+        <div class="flex items-center gap-2 flex-wrap mb-3">
+            <button class="btn btn-ghost" type="button" id="ba-scan-btn" onclick="loadBotAdmin()">
+                <i class="fa-solid fa-arrows-rotate"></i> Re-scan
+            </button>
+            <span class="hint" style="display:flex;align-items:center;gap:0.9rem;flex-wrap:wrap">
+                <span><i class="fa-solid fa-check ba-ok"></i> Admin</span>
+                <span><i class="fa-solid fa-xmark ba-no"></i> Not in channel</span>
+                <span><span class="ba-warn">●</span> Member (not admin)</span>
+                <span><i class="fa-solid fa-lock ba-muted"></i> Can't manage</span>
+            </span>
+        </div>
+
+        <div id="ba-loading" class="hint"><i class="fa-solid fa-spinner fa-spin"></i> Scanning channels &amp; bots…</div>
+        <div id="ba-error" class="hint" style="color:var(--danger);display:none"></div>
+
+        <div id="ba-body" style="display:none">
+            <label class="s-label">Bots to add</label>
+            <div id="ba-bots" class="flex items-center gap-2 flex-wrap mb-4"></div>
+
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <label class="s-label" style="margin-bottom:0">Channels</label>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost" type="button" onclick="selectAllBaChannels(true)"><i class="fa-solid fa-check-double"></i> All</button>
+                    <button class="btn btn-ghost" type="button" onclick="selectAllBaChannels(false)"><i class="fa-solid fa-xmark"></i> Clear</button>
+                </div>
+            </div>
+            <div id="ba-channels" class="ba-ch-list"></div>
+
+            <label class="chip mt-4" style="cursor:pointer">
+                <input type="checkbox" id="ba-demote-orphans">
+                <span class="min-w-0">
+                    <span class="c-name block">Also remove orphan bot-admins</span>
+                    <span class="c-id">Revoke admin from bots that are admin in a channel but are no longer in your token list (they stay as members, not banned).</span>
+                </span>
+            </label>
+
+            <div id="ba-progress" class="mt-4" style="display:none">
+                <div class="flex items-center justify-between mb-2 text-sm flex-wrap gap-2">
+                    <span class="font-semibold"><i class="fa-solid fa-user-shield"></i> Applying…</span>
+                    <span style="color:var(--text-sec)"><span id="ba-prog-done">0</span>/<span id="ba-prog-total">0</span> channels</span>
+                </div>
+                <div class="progress-track"><div class="progress-fill" id="ba-prog-bar"></div></div>
+            </div>
+
+            <div class="ba-actions flex items-center gap-2 flex-wrap mt-4">
+                <button class="btn btn-primary" id="ba-apply-btn" onclick="applyBotAdmin()">
+                    <i class="fa-solid fa-user-plus"></i> Add selected bots as admin
+                </button>
+            </div>
+
+            <div id="ba-results" class="dead-list mt-4" style="display:none"></div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ══ Database Check ════════════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-stethoscope"></i> Database Check &amp; Dead Links</h2>
+            <span id="dbc-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Verify indexed files still exist on Telegram, then purge dead entries below.
+        </p>
+
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div class="text-sm font-semibold" id="dbc-current">No check running</div>
+            <div class="text-sm" style="color:var(--text-sec)">
+                <i class="fa-solid fa-gauge-high"></i> <span id="dbc-speed">0</span>/s ·
+                <i class="fa-regular fa-clock"></i> <span id="dbc-elapsed">0s</span>
+            </div>
+        </div>
+        <div class="progress-track mb-4">
+            <div class="progress-fill" id="dbc-bar"></div>
+        </div>
+
+        <div class="stat-grid mb-4">
+            <div class="stat-box"><div class="v" id="dbc-checked">0</div><div class="l">Checked</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--ok)" id="dbc-alive">0</div><div class="l">Alive</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--danger)" id="dbc-dead">0</div><div class="l">Dead</div></div>
+            <div class="stat-box"><div class="v" id="dbc-errors">0</div><div class="l">Errors</div></div>
+            <div class="stat-box"><div class="v" id="dbc-purged">0</div><div class="l">Purged</div></div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+            <button class="btn btn-primary" id="dbc-start-btn" onclick="startDbCheck()">
+                <i class="fa-solid fa-play"></i> Run DB Check
+            </button>
+            <button class="btn btn-danger" id="dbc-cancel-btn" onclick="cancelDbCheck()" disabled>
+                <i class="fa-solid fa-stop"></i> Stop
+            </button>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Dead links -->
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Dead links found</label>
+            <div class="flex items-center gap-2">
+                <button class="btn btn-ghost" type="button" onclick="loadFlaggedDeadLinks()">
+                    <i class="fa-solid fa-rotate"></i> Load flagged
+                </button>
+                <button class="btn btn-danger" id="purge-btn" onclick="purgeDeadLinks()" disabled>
+                    <i class="fa-solid fa-trash"></i> <span id="purge-label">Purge dead links</span>
+                </button>
+            </div>
+        </div>
+        <p class="hint mb-3">"Load flagged" lists links the background checker found. Purging removes them.</p>
+        <div class="dead-list" id="dead-list">
+            <div class="hint">No dead links to show yet. Run a DB Check or load flagged links.</div>
+        </div>
+    </div>
+
+    <!-- Duplicate check & cleanup -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-clone"></i> Duplicate Check &amp; Cleanup</h2>
+            <span id="dup-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Find and remove streams stored more than once. Deleting also removes the Telegram file.
+        </p>
+
+        <div class="stat-grid mb-4">
+            <div class="stat-box"><div class="v" id="dup-scanned">0</div><div class="l">Scanned</div></div>
+            <div class="stat-box"><div class="v" id="dup-groups">0</div><div class="l">Groups</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--warn)" id="dup-count">0</div><div class="l">Redundant</div></div>
+            <div class="stat-box"><div class="v" id="dup-purged">0</div><div class="l">Removed</div></div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap mb-2">
+            <button class="btn btn-primary" id="dup-start-btn" onclick="startDuplicateCheck()">
+                <i class="fa-solid fa-magnifying-glass"></i> Scan for duplicates
+            </button>
+            <button class="btn btn-danger" id="dup-cancel-btn" onclick="cancelDuplicateCheck()" disabled>
+                <i class="fa-solid fa-stop"></i> Stop
+            </button>
+        </div>
+        <div id="dup-current" class="text-sm mb-2" style="color:var(--text-sec)">No scan running</div>
+
+        <div id="dup-purge-progress" class="hidden mb-2">
+            <div class="flex items-center justify-between mb-1 text-sm flex-wrap gap-2">
+                <span class="font-semibold" id="dup-purge-label"><i class="fa-solid fa-broom"></i> Removing duplicates…</span>
+                <span style="color:var(--text-sec)">
+                    <span id="dup-purge-done">0</span>/<span id="dup-purge-total">0</span> ·
+                    <i class="fa-regular fa-clock"></i> <span id="dup-purge-elapsed">0s</span> ·
+                    ETA <span id="dup-purge-eta">—</span>
+                </span>
+            </div>
+            <div class="progress-track"><div class="progress-fill" id="dup-purge-bar"></div></div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Duplicate groups</label>
+            <div class="flex items-center gap-2">
+                <button class="btn btn-ghost" type="button" id="dup-selected-btn" onclick="purgeDuplicates(false)" disabled>
+                    <i class="fa-solid fa-trash"></i> Delete selected
+                </button>
+                <button class="btn btn-danger" type="button" id="dup-all-btn" onclick="purgeDuplicates(true)" disabled>
+                    <i class="fa-solid fa-broom"></i> Delete all
+                </button>
+            </div>
+        </div>
+        <p class="hint mb-3">Pick copies to delete, or "Delete all" to keep only the newest of each group.</p>
+        <div class="dead-list" id="dup-list">
+            <div class="hint">No duplicates to show yet. Run a scan above.</div>
+        </div>
+    </div>
+
+    <!-- ══ ⚡ Batch Topic & Range Resolver (Direct TMDb / Nyaa) ════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-bolt"></i> Batch Topic &amp; Range Resolver</h2>
+            <span class="status-pill status-completed">Direct TMDb &amp; Nyaa Auto-Indexer</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Uploaded anime batches into a channel topic? Simply enter your <strong>Telegram message link range</strong> and <strong>TMDb ID</strong> (or a Nyaa link). The resolver fetches canonical episode titles from TMDb / TVMaze / Kitsu, aligns every episode to its Telegram message, stamps <code>{tmdb-id}</code> captions, and indexes everything into MongoDB automatically.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="s-label">Nyaa.si Torrent URL or ID (Optional)</label>
+                <input id="nyaa-url" placeholder="Optional - e.g. https://nyaa.si/view/1859137 (or leave empty)"
+                       style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.65rem 0.9rem;color:var(--text);outline:none">
+            </div>
+            <div>
+                <label class="s-label">Telegram Channel / Target</label>
+                <select id="nyaa-channel"
+                        style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.65rem 0.9rem;color:var(--text);outline:none">
+                    {% for c in auth_channels %}
+                    <option value="{{ c }}">{{ channel_titles.get(c, c) if channel_titles else c }} ({{ c }})</option>
+                    {% endfor %}
+                    {% if not auth_channels %}
+                    <option value="">Loading configured channels...</option>
+                    {% endif %}
+                </select>
+            </div>
+            <div>
+                <label class="s-label">Message Range (Start - End Msg ID or Telegram Links) *</label>
+                <div class="flex items-center gap-2">
+                    <input id="nyaa-start-msg" type="text" placeholder="Start ID or t.me link (e.g. 3363)"
+                           style="width:50%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.65rem 0.9rem;color:var(--text);outline:none">
+                    <span class="hint">to</span>
+                    <input id="nyaa-end-msg" type="text" placeholder="End ID or t.me link (e.g. 3472)"
+                           style="width:50%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.65rem 0.9rem;color:var(--text);outline:none">
+                </div>
+            </div>
+            <div>
+                <label class="s-label">TMDb ID or Show Title (e.g. 64710)</label>
+                <input id="nyaa-tmdb" placeholder="e.g. 64710 or Noragami"
+                       style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.65rem 0.9rem;color:var(--text);outline:none">
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4 flex-wrap mb-4">
+            <label class="flex items-center gap-2 text-xs font-bold text-text-sec cursor-pointer">
+                <input type="checkbox" id="nyaa-update-caps" checked style="accent-color:var(--primary)">
+                <span>Edit Telegram Post Captions (with {tmdb-id})</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs font-bold text-text-sec cursor-pointer">
+                <input type="checkbox" id="nyaa-direct-idx" checked style="accent-color:var(--primary)">
+                <span>Direct Index into MongoDB</span>
+            </label>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap mb-4">
+            <button class="btn btn-primary" id="nyaa-inspect-btn" onclick="inspectNyaaPlan()">
+                <i class="fa-solid fa-magnifying-glass"></i> Inspect &amp; Preview Plan
+            </button>
+            <button class="btn btn-ghost" onclick="clearNyaaInputs()">
+                <i class="fa-solid fa-eraser"></i> Clear
+            </button>
+        </div>
+
+        <div id="nyaa-plan-box" class="hidden mt-4 pt-4 border-t border-hairline">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div>
+                    <div class="text-sm font-bold text-text" id="nyaa-plan-title">Manifest Aligned</div>
+                    <div class="text-xs text-text-sec" id="nyaa-plan-sub"></div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-primary" id="nyaa-exec-btn" onclick="executeNyaaResolution()">
+                        <i class="fa-solid fa-bolt"></i> <span id="nyaa-exec-label">Resolve &amp; Index All</span>
+                    </button>
+                </div>
+            </div>
+            <div id="nyaa-items-list" class="dead-list"></div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         GAP RECONCILIATION - Telegram files vs MongoDB
+         ════════════════════════════════════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-magnifying-glass-chart"></i> Gap Reconciliation</h2>
+            <span id="gap-status-pill" class="status-pill status-idle">Ready</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Compares your Telegram filenames_report.txt against MongoDB to find files that are
+            <strong>missing</strong> (not indexed), <strong>misplaced</strong> (wrong season/episode in DB),
+            or <strong>present</strong> (already indexed correctly). Then indexes <strong>only the gaps</strong>.
+        </p>
+
+        <label class="s-label">Select channels to scan</label>
+        <div class="chip-list" id="gap-channel-list">
+            <div class="hint" id="gap-channels-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading channels…</div>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap mb-4">
+            <button class="btn btn-ghost" type="button" onclick="selectAllGapChannels(true)"><i class="fa-solid fa-check-double\"></i> Select all</button>
+            <button class="btn btn-ghost" type="button" onclick="selectAllGapChannels(false)"><i class="fa-solid fa-xmark\"></i> Clear</button>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap mb-4">
+            <button class="btn btn-primary" id="gap-check-btn" onclick="runGapCheck()">
+                <i class="fa-solid fa-magnifying-glass"></i> Check for Gaps
+            </button>
+            <button class="btn btn-ghost" onclick="clearGapReport()">
+                <i class="fa-solid fa-eraser"></i> Clear Report
+            </button>
+        </div>
+
+        <div id="gap-report-box" class="hidden mt-4 pt-4 border-t border-hairline">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div>
+                    <div class="text-sm font-bold text-text" id="gap-report-title">Gap Report</div>
+                    <div class="text-xs text-text-sec" id="gap-report-sub"></div>
+                </div>
+                <div class="stat-grid mb-4" style="display:flex;gap:1rem;flex-wrap:wrap">
+                    <div class="stat-box" style="min-width:110px"><div class="v" style="color:#ef4444" id="gap-missing">0</div><div class="l">Missing</div></div>
+                    <div class="stat-box" style="min-width:110px"><div class="v" style="color:#f59e0b" id="gap-misplaced">0</div><div class="l">Misplaced</div></div>
+                    <div class="stat-box" style="min-width:110px"><div class="v" style="color:#22c55e" id="gap-present">0</div><div class="l">Present</div></div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 flex-wrap mb-4">
+                <button class="btn btn-primary" id="gap-apply-btn" onclick="applyGaps()" disabled>
+                    <i class="fa-solid fa-bolt"></i> <span id="gap-apply-label">Index Gap Files Only</span>
+                </button>
+            </div>
+
+            <div id="gap-missing-list" class="dead-list mb-4"></div>
+            <div id="gap-misplaced-list" class="dead-list mb-4"></div>
+        </div>
+
+        <p class="hint mt-3">
+            <i class="fa-solid fa-circle-info"></i> Gaps are indexed with <code>indexer.py --apply</code> using
+            only the missing/misplaced files - your existing manual entries in MongoDB are never touched or overwritten.
+        </p>
+    </div>
+
+    <!-- ══ Anime Metadata & AniList Sync ═════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-wand-magic-sparkles"></i> Anime Metadata &amp; AniList Sync</h2>
+            <span id="als-status-pill" class="status-pill status-idle">Ready</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Automatically enrich your anime library with AniList scores (e.g. 91%), animation studio tags (MAPPA, Madhouse, ufotable), airing status, and Romaji/Japanese titles.
+        </p>
+
+        <div class="flex items-center gap-3 flex-wrap">
+            <button class="btn btn-primary" id="als-start-btn" onclick="startBulkAniListSync()">
+                <i class="fa-solid fa-arrows-rotate"></i> Sync All Anime with AniList
+            </button>
+        </div>
+        <p class="hint mt-3" id="als-message" style="display:none"></p>
+    </div>
+
+    <!-- ══ Nuvio & Stremio Addon Setup ═════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-satellite-dish" style="color:#8b5cf6"></i> Nuvio &amp; Stremio Addon Integration</h2>
+            <span class="status-pill status-completed">Ready</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Stream your entire Telegram anime &amp; movie library directly in <strong>Nuvio</strong> (Android, Google TV, Firestick, PC) or <strong>Stremio</strong> with native multi-part stream selection, accurate durations, and audio/subtitle track switching.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div style="background:var(--surface);border:1px solid var(--hairline);border-radius:1rem;padding:1rem">
+                <div class="flex items-center gap-2 mb-2 font-bold text-sm">
+                    <i class="fa-solid fa-rocket" style="color:#8b5cf6"></i> Nuvio Setup
+                </div>
+                <p class="text-xs text-text-sec mb-3">
+                    1. Open <strong>Nuvio</strong> &rarr; <strong>Settings</strong> &rarr; <strong>Add-ons</strong> &rarr; <strong>Add Add-on</strong>.<br>
+                    2. Paste your Manifest URL and click Add.
+                </p>
+                <button class="btn btn-primary w-full" style="background:linear-gradient(135deg, #6366f1, #8b5cf6)" onclick="copyNuvioManifest()">
+                    <i class="fa-solid fa-clipboard-check"></i> <span id="nuvio-copy-lbl">Copy Manifest for Nuvio</span>
+                </button>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--hairline);border-radius:1rem;padding:1rem">
+                <div class="flex items-center gap-2 mb-2 font-bold text-sm">
+                    <i class="fa-solid fa-play" style="color:var(--primary)"></i> Stremio Setup
+                </div>
+                <p class="text-xs text-text-sec mb-3">
+                    1. Open <strong>Stremio</strong> &rarr; <strong>Add-ons</strong> tab.<br>
+                    2. Paste the Manifest URL in search or click Install below.
+                </p>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-primary flex-1" onclick="installInStremio()">
+                        <i class="fa-solid fa-bolt"></i> Install in Stremio
+                    </button>
+                    <button class="btn btn-ghost" onclick="copyStremioManifest()" title="Copy Manifest">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ Automated Server Sync & Virtual Library (AniList + Jellyfin) ═══════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-bolt text-yellow-500"></i> Automated Sync &amp; Virtual Library (AniList + Jellyfin/Emby)</h2>
+            <span id="jf-status-pill" class="status-pill status-idle">Ready</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Automatically synchronizes your entire server: matches and enriches anime with <strong>AniList ratings, native/romaji titles, studios, and status</strong>, while generating virtual <strong><code>.strm</code> streaming files and rich Kodi/Jellyfin <code>.nfo</code> metadata</strong> directly to disk.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="block text-xs font-semibold mb-1" style="color:var(--text-sec)">Jellyfin Destination Folder (on Server Host)</label>
+                <input type="text" id="jf-target-dir" class="field-input w-full"
+                       placeholder="C:\JellyfinLibrary or D:\Media\Telegram" value="./jellyfin_library">
+                <span class="hint block mt-1">Directory where <code>Movies/</code> and <code>TV-Shows/</code> are synced.</span>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold mb-1" style="color:var(--text-sec)">Stremio / Jellyfin API Token</label>
+                <select id="jf-token-select" class="field-input w-full">
+                    <option value="">Loading tokens...</option>
+                </select>
+                <span class="hint block mt-1">Token used to authorize video chunk streaming.</span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-6 flex-wrap mb-4">
+            <label class="flex items-center gap-2 cursor-pointer text-sm font-semibold">
+                <input type="checkbox" id="sync-anilist-check" checked class="rounded border-hairline">
+                <span>🌟 Sync &amp; Enrich AniList Anime Metadata</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer text-sm font-semibold">
+                <input type="checkbox" id="sync-jellyfin-check" checked class="rounded border-hairline">
+                <span>🎬 Sync Jellyfin / Emby STRM &amp; NFO Library</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer text-sm">
+                <input type="checkbox" id="jf-include-nfos" checked class="rounded border-hairline">
+                <span>Include Kodi / Jellyfin <code>.nfo</code> Metadata</span>
+            </label>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap">
+            <button class="btn btn-primary" id="sync-all-btn" onclick="startSyncAllServer()">
+                <i class="fa-solid fa-bolt"></i> Sync All (AniList + Jellyfin)
+            </button>
+            <button class="btn btn-ghost" id="jf-sync-btn" onclick="startJellyfinSync()">
+                <i class="fa-solid fa-arrows-rotate"></i> Sync Jellyfin Only
+            </button>
+            <button class="btn btn-secondary" id="jf-download-btn" onclick="downloadJellyfinZip()">
+                <i class="fa-solid fa-file-zipper"></i> Download Library (.zip)
+            </button>
+        </div>
+
+        <div id="jf-stats-box" class="mt-4 p-3 rounded-xl border border-hairline" style="display:none; background: var(--bg-sec);">
+            <p class="text-sm font-semibold mb-1" id="jf-stats-title"></p>
+            <p class="text-xs" style="color:var(--text-sec); white-space: pre-line" id="jf-stats-detail"></p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+/* ─────────────── Manual Upload Session ─────────────── */
+let msResults = [];
+let msSelected = null;
+
+async function searchManualSession() {
+    const q = document.getElementById('ms-query').value.trim();
+    const state = document.getElementById('ms-search-state');
+    const box = document.getElementById('ms-results');
+    if (!q) { showToast('Type a title, IMDb or TMDB id/link.', 'error', 'Search'); return; }
+    state.style.display = '';
+    state.textContent = 'Searching your library and IMDb / TMDB…';
+    box.style.display = 'none';
+    box.innerHTML = '';
+    document.getElementById('ms-selected-box').classList.add('hidden');
+    msSelected = null;
+    try {
+        const res = await fetch('/api/admin/tools/manual-session/search?query=' + encodeURIComponent(q));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Search failed');
+        msResults = data.results || [];
+        if (!msResults.length) {
+            state.textContent = 'No matching title found. Try a different name, or an IMDb / TMDB id or link.';
+            return;
+        }
+        state.textContent = `Found ${msResults.length} title${msResults.length > 1 ? 's' : ''}. Select one:`;
+        box.innerHTML = msResults.map((r, i) => {
+            const badge = r.in_library
+                ? `<span class="c-id">${escapeHtml(String(r.year || '—'))} · In library · TMDB ${escapeHtml(String(r.tmdb_id))} · DB #${escapeHtml(String(r.db_index))}</span>`
+                : `<span class="c-id">${escapeHtml(String(r.year || '—'))} · New · ${escapeHtml(String(r.source || '').toUpperCase())} · ${escapeHtml(String(r.selected_id || ''))}</span>`;
+            return `
+            <label class="chip" onclick="pickManualResult(${i})">
+                <img src="${escapeHtmlAttr(r.poster) || '/static/placeholder.svg'}" onerror="this.src='/static/placeholder.svg'"
+                     style="width:2.25rem;height:3.25rem;object-fit:cover;border-radius:0.35rem;flex-shrink:0;background:var(--card)">
+                <span class="min-w-0">
+                    <span class="c-name block truncate">${escapeHtml(r.title)}
+                        <span class="status-pill ${r.media_type === 'tv' ? 'status-running' : 'status-idle'}" style="margin-left:.4rem">${r.media_type === 'tv' ? 'TV' : 'Movie'}</span>
+                    </span>
+                    ${badge}
+                </span>
+            </label>`;
+        }).join('');
+        box.style.display = '';
+    } catch (e) {
+        state.textContent = e.message || 'Search failed.';
+    }
+}
+
+function pickManualResult(i) {
+    const r = msResults[i];
+    if (!r) return;
+    msSelected = r;
+    const isPersonal = !!r.is_personal;
+    const isTv = r.media_type === 'tv';
+
+    document.getElementById('ms-sel-poster').src = r.poster || '/static/placeholder.svg';
+    document.getElementById('ms-sel-title').textContent = r.title;
+    const locationText = r.in_library ? `TMDB ${r.tmdb_id} · DB #${r.db_index}` : `New · ${String(r.source || '').toUpperCase()} ${r.selected_id || ''}`;
+    document.getElementById('ms-sel-sub').textContent =
+        `${isTv ? 'TV Show' : 'Movie'} · ${isPersonal ? 'Personal' : 'TMDB/IMDb'} · ${r.year || '—'} · ${locationText}`;
+
+    document.getElementById('ms-real-note').classList.toggle('hidden', isPersonal);
+    document.getElementById('ms-real-tv-season').classList.toggle('hidden', isPersonal || !isTv);
+    document.getElementById('ms-personal-fields').classList.toggle('hidden', !isPersonal);
+    document.getElementById('ms-tv-fields').classList.toggle('hidden', !(isPersonal && isTv));
+
+    document.getElementById('ms-season').value = '';
+    document.getElementById('ms-episode').value = '';
+    document.getElementById('ms-quality').value = '';
+    document.getElementById('ms-real-season').value = '';
+    document.getElementById('ms-selected-box').classList.remove('hidden');
+    document.getElementById('ms-results').style.display = 'none';
+}
+
+async function startManualSession() {
+    if (!msSelected) { showToast('Select a title first.', 'error', 'Session'); return; }
+    const payload = {
+        tmdb_id: msSelected.tmdb_id,
+        db_index: msSelected.db_index,
+        media_type: msSelected.media_type,
+        selected_id: msSelected.selected_id,
+        in_library: msSelected.in_library !== false,
+    };
+    if (!msSelected.in_library && msSelected.media_type === 'tv') {
+        const rs = document.getElementById('ms-real-season').value.trim();
+        if (rs !== '') payload.season = rs;
+    }
+    if (msSelected.is_personal) {
+        if (msSelected.media_type === 'tv') {
+            const s = document.getElementById('ms-season').value.trim();
+            if (s === '') { showToast('Season number is required for personal TV shows.', 'error', 'Session'); return; }
+            payload.season = s;
+            const ep = document.getElementById('ms-episode').value.trim();
+            if (ep !== '') payload.episode = ep;
+        }
+        const q = document.getElementById('ms-quality').value.trim();
+        if (q !== '') payload.quality = q;
+    } else if (msSelected.media_type === 'tv') {
+        const rs = document.getElementById('ms-real-season').value.trim();
+        if (rs !== '') payload.season = rs;
+    }
+    try {
+        const res = await fetch('/api/admin/tools/manual-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not start session');
+        showToast('Session started. Forward files to your manual channel.', 'success', 'Session');
+        renderManualSession(data.session);
+    } catch (e) {
+        showToast(e.message || 'Could not start session.', 'error', 'Session');
+    }
+}
+
+async function endManualSession() {
+    try {
+        const res = await fetch('/api/admin/tools/manual-session', { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not end session');
+        showToast('Session ended.', 'info', 'Session');
+        renderManualSession(null);
+    } catch (e) {
+        showToast(e.message || 'Could not end session.', 'error', 'Session');
+    }
+}
+
+function renderManualSession(session) {
+    const pill = document.getElementById('ms-status-pill');
+    const active = document.getElementById('ms-active');
+    const setup = document.getElementById('ms-setup');
+
+    if (session && session.tmdb_id !== undefined && session.tmdb_id !== null) {
+        pill.className = 'status-pill status-running';
+        pill.textContent = 'Active';
+        active.classList.remove('hidden');
+        setup.classList.add('hidden');
+
+        const isTv = session.media_type === 'tv';
+        document.getElementById('ms-active-title').textContent =
+            `${session.title || 'Title'}${session.year ? ' (' + session.year + ')' : ''}`;
+
+        let detail = isTv ? 'TV Show' : 'Movie';
+        if (session.is_personal) {
+            detail += ' · Personal';
+            if (isTv) {
+                detail += ` · Season ${session.season}`;
+                detail += (session.episode !== null && session.episode !== undefined)
+                    ? ` · Episode ${session.episode} (all files → this episode)`
+                    : ' · each file → next episode';
+            } else {
+                detail += ' · each file → a new quality';
+            }
+            detail += ' · forward to MANUAL channel only';
+        } else {
+            detail += ' · TMDB/IMDb · auto-detected from each file';
+            if (isTv && session.season !== null && session.season !== undefined) {
+                detail += ` · fallback Season ${session.season}`;
+            }
+            detail += ' · forward to AUTH or MANUAL channel';
+        }
+        document.getElementById('ms-active-detail').textContent = detail;
+    } else {
+        pill.className = 'status-pill status-idle';
+        pill.textContent = 'No session';
+        active.classList.add('hidden');
+        setup.classList.remove('hidden');
+        document.getElementById('ms-results').style.display = 'none';
+        document.getElementById('ms-selected-box').classList.add('hidden');
+        document.getElementById('ms-search-state').style.display = 'none';
+        msSelected = null;
+    }
+}
+
+async function loadManualSession() {
+    try {
+        const res = await fetch('/api/admin/tools/manual-session');
+        const data = await res.json();
+        renderManualSession(data.session);
+    } catch (e) { /* ignore */ }
+}
+
+/* ─────────────── State ─────────────── */
+let scanTimer = null;
+let dbcTimer = null;
+let dupTimer = null;
+let dupPurgeTimer = null;
+let dupPurgeActive = false;
+let dupGroups = [];
+let deadSource = "dbcheck";   // where the current dead list came from
+let purgeIds = [];            // explicit ids to purge when source = flagged
+
+/* ─────────────── Channels ─────────────── */
+async function loadChannels() {
+    const list = document.getElementById('channel-list');
+    const nyaaSelect = document.getElementById('nyaa-channel');
+    try {
+        const res = await fetch('/api/admin/tools/channels');
+        const data = await res.json();
+        const channels = (data && data.data) || [];
+        if (!channels.length) {
+            if (list) list.innerHTML = `<div class="hint">No AUTH channels configured. Add them in <a href="/admin/settings" style="color:var(--primary)">Settings</a>.</div>`;
+            if (nyaaSelect) nyaaSelect.innerHTML = `<option value="">No configured channels</option>`;
+            return;
+        }
+        if (list) {
+            list.innerHTML = channels.map(c => `
+                <label class="chip" data-id="${escapeHtmlAttr(c.id)}">
+                    <input type="checkbox" value="${escapeHtmlAttr(c.id)}" onchange="onChipChange(this)">
+                    <span class="min-w-0">
+                        <span class="c-name block">${escapeHtml(c.name)}</span>
+                        <span class="c-id">${escapeHtml(c.id)}</span>
+                    </span>
+                </label>
+            `).join('');
+        }
+        if (nyaaSelect) {
+            nyaaSelect.innerHTML = channels.map((c, idx) => `
+                <option value="${escapeHtmlAttr(c.id)}" ${idx === 0 ? 'selected' : ''}>
+                    ${escapeHtml(c.name)} (${escapeHtml(c.id)})
+                </option>
+            `).join('');
+        }
+    } catch (e) {
+        if (list) list.innerHTML = `<div class="hint" style="color:var(--danger)">Failed to load channels.</div>`;
+    }
+}
+
+function onChipChange(input) {
+    input.closest('.chip').classList.toggle('selected', input.checked);
+}
+function selectAllChannels(state) {
+    document.querySelectorAll('#channel-list input[type=checkbox]').forEach(cb => {
+        cb.checked = state;
+        onChipChange(cb);
+    });
+}
+function getSelectedChannels() {
+    return [...document.querySelectorAll('#channel-list input[type=checkbox]:checked')].map(cb => cb.value);
+}
+
+/* ─────────────── Scan control ─────────────── */
+async function startScan(mode) {
+    const channels = getSelectedChannels();
+    if (mode === 'scan' && !channels.length) {
+        // allow plain resume with no selection only if resumable
+        showToast('Select at least one channel to scan.', 'error', 'No channels');
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/tools/scan/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode, channels })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast(data.message || 'Scan started.', 'success', 'Scanner');
+            startScanPolling();
+        } else {
+            showToast(data.detail || 'Could not start scan.', 'error', 'Error');
+        }
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+    }
+}
+
+function parseTgInput(val) {
+    if (!val) return null;
+    val = String(val).trim();
+    if (/^\d+$/.test(val)) return parseInt(val, 10);
+    const clean = val.split(/[?#]/)[0].replace(/\/+$/, '');
+    const parts = clean.split('/').filter(p => /^\d+$/.test(p));
+    if (parts.length > 0) {
+        return parseInt(parts[parts.length - 1], 10);
+    }
+    const digits = val.match(/\d+/g);
+    return digits ? parseInt(digits[digits.length - 1], 10) : null;
+}
+
+function extractTgChannelFromUrl(url) {
+    if (!url) return null;
+    const m = String(url).match(/t\.me\/c\/(\d+)/);
+    if (m) return m[1];
+    return null;
+}
+
+function autoSelectChannelIfPresent(selectId, url) {
+    const ch = extractTgChannelFromUrl(url);
+    if (!ch) return;
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    for (const opt of select.options) {
+        if (opt.value.includes(ch) || ch.includes(opt.value.replace('-100', ''))) {
+            select.value = opt.value;
+            break;
+        }
+    }
+}
+
+async function startRangeScan() {
+    const rawStart = document.getElementById('scan-range-start').value;
+    const rawEnd = document.getElementById('scan-range-end').value;
+    const startId = parseTgInput(rawStart);
+    const endId = parseTgInput(rawEnd);
+    if (!startId || !endId) {
+        showToast('Please enter both Start and End Message IDs (or paste Telegram links).', 'error', 'Missing IDs');
+        return;
+    }
+    let channels = getSelectedChannels();
+    if (!channels.length) {
+        const chFromLink = extractTgChannelFromUrl(rawStart) || extractTgChannelFromUrl(rawEnd);
+        if (chFromLink) {
+            const allCbs = document.querySelectorAll('#channel-list input[type=checkbox]');
+            for (const cb of allCbs) {
+                if (cb.value.includes(chFromLink) || chFromLink.includes(cb.value.replace('-100', ''))) {
+                    cb.checked = true;
+                    break;
+                }
+            }
+            channels = getSelectedChannels();
+        }
+        if (!channels.length) {
+            const firstCb = document.querySelector('#channel-list input[type=checkbox]');
+            if (firstCb) {
+                firstCb.checked = true;
+                channels = [firstCb.value];
+            }
+        }
+    }
+    if (!channels.length) {
+        showToast('Select a channel to scan.', 'error', 'No Channel');
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/tools/scan/range', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: channels[0], start_id: startId, end_id: endId, mode: 'scan' })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast(data.message || 'Range scan started.', 'success', 'Scanner');
+            startScanPolling();
+        } else {
+            showToast(data.detail || 'Could not start range scan.', 'error', 'Error');
+        }
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+    }
+}
+
+function confirmRescan() {
+    const channels = getSelectedChannels();
+    if (!channels.length) {
+        showToast('Select the channels you want to rescan.', 'error', 'No channels');
+        return;
+    }
+    if (!confirm(`Rescan will DELETE all existing DB entries for ${channels.length} selected channel(s) and re-index from scratch.\n\nProceed?`)) return;
+    startScan('rescan');
+}
+
+async function cancelScan() {
+    try {
+        const res = await fetch('/api/admin/tools/scan/cancel', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || 'Stop requested.', data.ok ? 'info' : 'error', 'Scanner');
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+    }
+}
+
+async function resetScanState() {
+    if (!confirm("Reset scan state, range limits, and channel pointers? This clears any old range limits and lets you run fresh full scans.")) return;
+    const channels = getSelectedChannels();
+    const ch = channels.length ? channels[0] : null;
+    try {
+        const res = await fetch('/api/admin/tools/scan/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: ch })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast(data.message || 'Scanner state reset.', 'success', 'Scanner Reset');
+            resetRangeInputs();
+            document.getElementById('sc-current').textContent = '0';
+            document.getElementById('sc-target').textContent = '0';
+            document.getElementById('sc-found').textContent = '0';
+            document.getElementById('sc-processed').textContent = '0';
+            document.getElementById('sc-errors').textContent = '0';
+            document.getElementById('scan-status-text').textContent = 'Idle';
+            document.getElementById('scan-start-btn').disabled = false;
+            document.getElementById('scan-cancel-btn').disabled = true;
+        } else {
+            showToast(data.detail || 'Could not reset scan state.', 'error', 'Error');
+        }
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+    }
+}
+
+async function runConsolidateMultiParts() {
+    const btn = document.getElementById('consolidate-btn');
+    if (btn) btn.disabled = true;
+    showToast('Consolidating multi-part streams in database…', 'info', 'Consolidating');
+    try {
+        const res = await fetch('/api/admin/tools/consolidate-multiparts', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            showToast(data.message || 'Consolidation complete!', 'success', 'Multi-Part Consolidation');
+        } else {
+            showToast(data.detail || 'Consolidation failed.', 'error', 'Error');
+        }
+    } catch (e) {
+        showToast('Network error while consolidating.', 'error', 'Error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function resetRangeInputs() {
+    const startInput = document.getElementById('scan-range-start');
+    const endInput = document.getElementById('scan-range-end');
+    if (startInput) startInput.value = '';
+    if (endInput) endInput.value = '';
+}
+
+function startScanPolling() {
+    if (scanTimer) clearInterval(scanTimer);
+    pollScan();
+    scanTimer = setInterval(pollScan, 1500);
+}
+
+async function pollScan() {
+    try {
+        const res = await fetch('/api/admin/tools/scan/status');
+        const data = await res.json();
+        renderScan(data.data || {});
+    } catch (e) { /* ignore transient errors */ }
+}
+
+function renderScan(s) {
+    const pill = document.getElementById('scan-status-pill');
+    const status = s.status || 'idle';
+    pill.className = 'status-pill status-' + status;
+    pill.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    const c = s.counters || {};
+    setText('sc-processed', c.processed || 0);
+    setText('sc-indexed', c.indexed || 0);
+    setText('sc-dup', c.skipped_dup || 0);
+    setText('sc-meta', c.skipped_meta || 0);
+    setText('sc-nonvid', c.skipped_nonvid || 0);
+    setText('sc-sub-added', c.subtitles_added || 0);
+    setText('sc-sub-skipped', c.subtitles_skipped || 0);
+    setText('sc-errors', c.errors || 0);
+    setText('scan-elapsed', s.elapsed || '0s');
+
+    const bar = document.getElementById('scan-bar');
+    const startBtn = document.getElementById('scan-start-btn');
+    const cancelBtn = document.getElementById('scan-cancel-btn');
+    const rescanBtn = document.getElementById('rescan-btn');
+    const startLabel = document.getElementById('scan-start-label');
+    const errEl = document.getElementById('scan-error');
+
+    if (s.is_running) {
+        const name = s.current_channel_name || s.current_channel || '';
+        if (s.has_progress && s.current_target_id) {
+            bar.classList.remove('indeterminate');
+            bar.style.width = (s.progress || 0) + '%';
+            document.getElementById('scan-current').textContent =
+                `Scanning ${name} · ${s.current_id}/${s.current_target_id} (${s.progress || 0}%)`;
+        } else {
+            bar.classList.add('indeterminate');
+            document.getElementById('scan-current').textContent =
+                `Scanning ${name}` + (s.current_id ? ` · up to msg #${s.current_id}` : '');
+        }
+        startBtn.disabled = true; rescanBtn.disabled = true; cancelBtn.disabled = false;
+        errEl.style.display = 'none';
+    } else {
+        bar.classList.remove('indeterminate');
+        startBtn.disabled = false; rescanBtn.disabled = false; cancelBtn.disabled = true;
+
+        if (s.resumable) {
+            startLabel.textContent = 'Resume Scan';
+            bar.style.width = '60%';
+            document.getElementById('scan-current').textContent =
+                `Paused — ${ (s.pending||[]).length } channel(s) remaining. Resume to continue.`;
+        } else {
+            startLabel.textContent = 'Start Scan';
+            bar.style.width = (status === 'completed') ? '100%' : '0%';
+            document.getElementById('scan-current').textContent =
+                status === 'completed' ? 'Scan complete.' :
+                status === 'error' ? 'Scan failed.' : 'No scan running';
+        }
+
+        if (s.error) { errEl.style.display = ''; errEl.textContent = s.error; }
+        else errEl.style.display = 'none';
+
+        if (scanTimer && ['completed','cancelled','error','paused','idle'].includes(status)) {
+            clearInterval(scanTimer); scanTimer = null;
+        }
+    }
+}
+
+/* ─────────────── DB Check control ─────────────── */
+async function startDbCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/dbcheck/start', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('DB check started.', 'success', 'DB Check');
+            startDbcPolling();
+        } else {
+            showToast(data.detail || 'Could not start.', 'error', 'Error');
+        }
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+async function cancelDbCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/dbcheck/cancel', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || 'Stop requested.', data.ok ? 'info' : 'error', 'DB Check');
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+function startDbcPolling() {
+    if (dbcTimer) clearInterval(dbcTimer);
+    pollDbc();
+    dbcTimer = setInterval(pollDbc, 1500);
+}
+
+async function pollDbc() {
+    try {
+        const res = await fetch('/api/admin/tools/dbcheck/status');
+        const data = await res.json();
+        renderDbc(data.data || {});
+    } catch (e) { /* ignore */ }
+}
+
+function renderDbc(s) {
+    const pill = document.getElementById('dbc-status-pill');
+    const status = s.status || 'idle';
+    pill.className = 'status-pill status-' + status;
+    pill.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    setText('dbc-checked', s.checked || 0);
+    setText('dbc-alive', s.alive || 0);
+    setText('dbc-dead', s.dead || 0);
+    setText('dbc-errors', s.errors || 0);
+    setText('dbc-purged', s.purged || 0);
+    setText('dbc-speed', s.speed || 0);
+    setText('dbc-elapsed', s.elapsed || '0s');
+
+    const bar = document.getElementById('dbc-bar');
+    const startBtn = document.getElementById('dbc-start-btn');
+    const cancelBtn = document.getElementById('dbc-cancel-btn');
+
+    if (s.is_running) {
+        document.getElementById('dbc-current').textContent = `Checking… ${s.checked || 0} verified`;
+        bar.classList.add('indeterminate');
+        startBtn.disabled = true; cancelBtn.disabled = false;
+    } else {
+        bar.classList.remove('indeterminate');
+        bar.style.width = (status === 'completed' || status === 'cancelled') ? '100%' : '0%';
+        startBtn.disabled = false; cancelBtn.disabled = true;
+        document.getElementById('dbc-current').textContent =
+            status === 'completed' ? `Done — ${s.dead || 0} dead found.` :
+            status === 'cancelled' ? 'Stopped.' :
+            status === 'error' ? 'Check failed.' : 'No check running';
+
+        if (dbcTimer && ['completed','cancelled','error','idle'].includes(status)) {
+            clearInterval(dbcTimer); dbcTimer = null;
+        }
+    }
+
+    // refresh dead list from this run's findings
+    if ((s.dead_entries || []).length || status === 'completed') {
+        deadSource = 'dbcheck';
+        purgeIds = [];
+        renderDeadList(s.dead_entries || []);
+    }
+}
+
+/* ─────────────── Dead links ─────────────── */
+function renderDeadList(entries) {
+    const list = document.getElementById('dead-list');
+    const purgeBtn = document.getElementById('purge-btn');
+    const purgeLabel = document.getElementById('purge-label');
+
+    if (!entries.length) {
+        list.innerHTML = `<div class="hint">No dead links to show.</div>`;
+        purgeBtn.disabled = true;
+        purgeLabel.textContent = 'Purge dead links';
+        return;
+    }
+    list.innerHTML = entries.map(e => `
+        <div class="dead-row">
+            <span class="min-w-0 truncate">
+                <i class="fa-solid fa-link-slash" style="color:var(--danger)"></i>
+                ${escapeHtml(e.title || 'Unknown')}
+                ${e.quality ? `<span class="c-id">· ${escapeHtml(e.quality)}</span>` : ''}
+            </span>
+        </div>
+    `).join('');
+    purgeBtn.disabled = false;
+    purgeLabel.textContent = `Purge ${entries.length} dead link${entries.length === 1 ? '' : 's'}`;
+}
+
+async function loadFlaggedDeadLinks() {
+    try {
+        const res = await fetch('/api/admin/dead-links');
+        const data = await res.json();
+        const links = (data && data.data) || [];
+        deadSource = 'flagged';
+        purgeIds = links.map(l => l.quality_id).filter(Boolean);
+        renderDeadList(links.map(l => ({ title: l.title, quality: l.quality })));
+        showToast(`${links.length} flagged dead link(s) loaded.`, 'info', 'Dead Links');
+    } catch (e) { showToast('Failed to load flagged links.', 'error', 'Error'); }
+}
+
+async function purgeDeadLinks() {
+    if (!confirm('Permanently remove these dead links from the database?')) return;
+    const btn = document.getElementById('purge-btn');
+    btn.disabled = true;
+    const body = (deadSource === 'flagged')
+        ? { source: 'flagged' }
+        : { source: 'dbcheck' };
+    try {
+        const res = await fetch('/api/admin/tools/dead-links/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+            showToast(data.message || 'Purged.', 'success', 'Dead Links');
+            renderDeadList([]);
+            pollDbc();
+        } else {
+            showToast(data.message || data.detail || 'Nothing to purge.', 'error', 'Dead Links');
+            btn.disabled = false;
+        }
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+        btn.disabled = false;
+    }
+}
+
+/* ─────────────── Duplicate check & cleanup ─────────────── */
+async function startDuplicateCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/start', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Duplicate scan started.', 'success', 'Duplicates');
+            startDupPolling();
+        } else {
+            showToast(data.detail || 'Could not start.', 'error', 'Error');
+        }
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+async function cancelDuplicateCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/cancel', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || 'Stop requested.', data.ok ? 'info' : 'error', 'Duplicates');
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+function startDupPolling() {
+    if (dupTimer) clearInterval(dupTimer);
+    pollDup();
+    dupTimer = setInterval(pollDup, 1500);
+}
+
+async function pollDup() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/status');
+        const data = await res.json();
+        renderDup(data.data || {});
+    } catch (e) { /* ignore */ }
+}
+
+function renderDup(s) {
+    const pill = document.getElementById('dup-status-pill');
+    const status = s.status || 'idle';
+    pill.className = 'status-pill status-' + status;
+    pill.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    setText('dup-scanned', s.scanned || 0);
+    setText('dup-groups', s.group_count || 0);
+    setText('dup-count', s.duplicate_count || 0);
+    setText('dup-purged', s.purged || 0);
+
+    const startBtn = document.getElementById('dup-start-btn');
+    const cancelBtn = document.getElementById('dup-cancel-btn');
+    if (s.is_running) {
+        startBtn.disabled = true; cancelBtn.disabled = false;
+        document.getElementById('dup-current').textContent = `Scanning… ${s.scanned || 0} titles checked`;
+    } else {
+        startBtn.disabled = false; cancelBtn.disabled = true;
+        document.getElementById('dup-current').textContent =
+            status === 'completed' ? `Done — ${s.group_count || 0} duplicate group(s) found.` :
+            status === 'cancelled' ? 'Stopped.' :
+            status === 'error' ? 'Scan failed.' : 'No scan running';
+        if (dupTimer && ['completed','cancelled','error','idle'].includes(status)) {
+            clearInterval(dupTimer); dupTimer = null;
+        }
+    }
+
+    renderDupPurge(s);
+    dupGroups = s.groups || [];
+    renderDupList();
+}
+
+/* Cleanup progress bar (poll-driven) */
+function renderDupPurge(s) {
+    const box = document.getElementById('dup-purge-progress');
+    const pStatus = s.purge_status || 'idle';
+    const selBtn = document.getElementById('dup-selected-btn');
+    const allBtn = document.getElementById('dup-all-btn');
+    const startBtn = document.getElementById('dup-start-btn');
+
+    if (pStatus === 'running') {
+        dupPurgeActive = true;
+        box.classList.remove('hidden');
+        setText('dup-purge-done', s.purge_done || 0);
+        setText('dup-purge-total', s.purge_total || 0);
+        setText('dup-purge-elapsed', s.purge_elapsed || '0s');
+        setText('dup-purge-eta', s.purge_eta || '—');
+        document.getElementById('dup-purge-bar').style.width = (s.purge_progress || 0) + '%';
+        selBtn.disabled = true; allBtn.disabled = true; startBtn.disabled = true;
+        if (!dupPurgeTimer) startDupPurgePolling();
+        return;
+    }
+
+    if (dupPurgeActive && (pStatus === 'completed' || pStatus === 'error')) {
+        dupPurgeActive = false;
+        if (dupPurgeTimer) { clearInterval(dupPurgeTimer); dupPurgeTimer = null; }
+        setText('dup-purge-done', s.purge_done || 0);
+        setText('dup-purge-total', s.purge_total || 0);
+        setText('dup-purge-elapsed', s.purge_elapsed || '0s');
+        setText('dup-purge-eta', '—');
+        document.getElementById('dup-purge-bar').style.width = '100%';
+        document.getElementById('dup-purge-label').innerHTML = pStatus === 'completed'
+            ? '<i class="fa-solid fa-check"></i> Cleanup complete'
+            : '<i class="fa-solid fa-triangle-exclamation"></i> Cleanup failed';
+        showToast(
+            pStatus === 'completed' ? `Removed ${s.purge_total || 0} duplicate(s).` : (s.error || 'Cleanup failed.'),
+            pStatus === 'completed' ? 'success' : 'error', 'Duplicates'
+        );
+        setTimeout(() => document.getElementById('dup-purge-progress').classList.add('hidden'), 2500);
+    }
+}
+
+function renderDupList() {
+    const list = document.getElementById('dup-list');
+    const selBtn = document.getElementById('dup-selected-btn');
+    const allBtn = document.getElementById('dup-all-btn');
+    const purging = dupPurgeActive;
+
+    if (!dupGroups.length) {
+        list.innerHTML = `<div class="hint">No duplicates to show.</div>`;
+        selBtn.disabled = true; allBtn.disabled = true;
+        return;
+    }
+    list.innerHTML = dupGroups.map(g => `
+        <div class="dead-row" style="flex-direction:column;align-items:stretch;gap:0.5rem">
+            <div class="min-w-0 truncate font-semibold">
+                <i class="fa-solid fa-clone" style="color:var(--warn)"></i>
+                ${escapeHtml(g.title || 'Unknown')}
+                <span class="c-id">· ${escapeHtml(g.quality || '')} · ${g.entries.length} copies</span>
+            </div>
+            ${g.entries.map((e, i) => `
+                <label class="flex items-center gap-2 text-sm" style="padding-left:1.25rem">
+                    <input type="checkbox" class="dup-cb" data-id="${escapeHtmlAttr(e.id)}"
+                        ${i === g.entries.length - 1 ? '' : 'checked'}>
+                    <span class="min-w-0 truncate">${escapeHtml(e.name || 'file')}
+                        <span class="c-id">· ${escapeHtml(e.size || '')}${i === g.entries.length - 1 ? ' · newest' : ''}</span>
+                    </span>
+                </label>
+            `).join('')}
+        </div>
+    `).join('');
+    selBtn.disabled = purging; allBtn.disabled = purging;
+}
+
+async function purgeDuplicates(deleteAll) {
+    let body;
+    if (deleteAll) {
+        if (!confirm('Keep the newest copy of every group and permanently delete the rest (including the Telegram files)?')) return;
+        body = { delete_all: true };
+    } else {
+        const ids = Array.from(document.querySelectorAll('#dup-list .dup-cb:checked')).map(cb => cb.dataset.id);
+        if (!ids.length) { showToast('Select at least one copy to delete.', 'error', 'Duplicates'); return; }
+        if (!confirm(`Permanently delete ${ids.length} selected cop${ids.length === 1 ? 'y' : 'ies'} (including the Telegram files)?`)) return;
+        body = { stream_ids: ids };
+    }
+    document.getElementById('dup-selected-btn').disabled = true;
+    document.getElementById('dup-all-btn').disabled = true;
+    document.getElementById('dup-start-btn').disabled = true;
+
+    const box = document.getElementById('dup-purge-progress');
+    box.classList.remove('hidden');
+    document.getElementById('dup-purge-label').innerHTML = '<i class="fa-solid fa-broom"></i> Removing duplicates…';
+    document.getElementById('dup-purge-bar').style.width = '0%';
+    setText('dup-purge-done', 0);
+    setText('dup-purge-eta', '—');
+
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+            setText('dup-purge-total', data.total || 0);
+            showToast(data.message || 'Cleanup started.', 'info', 'Duplicates');
+            dupPurgeActive = true;
+            startDupPurgePolling();
+        } else {
+            box.classList.add('hidden');
+            showToast(data.message || data.detail || 'Nothing removed.', 'error', 'Duplicates');
+            document.getElementById('dup-selected-btn').disabled = false;
+            document.getElementById('dup-all-btn').disabled = false;
+            document.getElementById('dup-start-btn').disabled = false;
+        }
+    } catch (e) {
+        box.classList.add('hidden');
+        showToast('Network error.', 'error', 'Error');
+        document.getElementById('dup-selected-btn').disabled = false;
+        document.getElementById('dup-all-btn').disabled = false;
+        document.getElementById('dup-start-btn').disabled = false;
+    }
+}
+
+function startDupPurgePolling() {
+    if (dupPurgeTimer) clearInterval(dupPurgeTimer);
+    pollDup();
+    dupPurgeTimer = setInterval(pollDup, 700);
+}
+
+let baData = null;
+let baApplyTimer = null;
+
+const BA_STAT = {
+    admin:      '<span class="ba-cell ba-ok"><i class="fa-solid fa-circle-check"></i> Admin</span>',
+    member:     '<span class="ba-cell ba-warn"><i class="fa-solid fa-circle"></i> Member</span>',
+    restricted: '<span class="ba-cell ba-warn"><i class="fa-solid fa-ban"></i> Restricted</span>',
+    banned:     '<span class="ba-cell ba-no"><i class="fa-solid fa-ban"></i> Banned</span>',
+    missing:    '<span class="ba-cell ba-no"><i class="fa-solid fa-circle-xmark"></i> Not in</span>',
+};
+const BA_SESSION = {
+    owner:             '<span class="ba-cell ba-ok"><i class="fa-solid fa-crown"></i> Owner</span>',
+    admin_can_promote: '<span class="ba-cell ba-ok"><i class="fa-solid fa-user-shield"></i> Admin · can add</span>',
+    admin_no_promote:  '<span class="ba-cell ba-warn"><i class="fa-solid fa-user-shield"></i> No add-admin</span>',
+    not_admin:         '<span class="ba-cell ba-no"><i class="fa-solid fa-lock"></i> Not admin</span>',
+    unknown:           '<span class="ba-cell ba-muted"><i class="fa-solid fa-question"></i> Unknown</span>',
+};
+
+async function loadBotAdmin() {
+    const body = document.getElementById('ba-body');
+    if (!body) return;
+    const loading = document.getElementById('ba-loading');
+    const errEl = document.getElementById('ba-error');
+    const pill = document.getElementById('ba-status-pill');
+    loading.style.display = ''; errEl.style.display = 'none'; body.style.display = 'none';
+    pill.className = 'status-pill status-running'; pill.textContent = 'Scanning';
+    try {
+        const res = await fetch('/api/admin/tools/bot-admin/scan');
+        const data = await res.json();
+        loading.style.display = 'none';
+        if (data.status !== 'success') {
+            errEl.style.display = ''; errEl.textContent = data.message || 'Scan failed.';
+            pill.className = 'status-pill status-error'; pill.textContent = 'Error';
+            return;
+        }
+        baData = data.data;
+        renderBotAdmin();
+        body.style.display = '';
+        pill.className = 'status-pill status-idle'; pill.textContent = 'Ready';
+    } catch (e) {
+        loading.style.display = 'none';
+        errEl.style.display = ''; errEl.textContent = 'Network error while scanning.';
+        pill.className = 'status-pill status-error'; pill.textContent = 'Error';
+    }
+}
+
+function renderBotAdmin() {
+    const bots = (baData && baData.bots) || [];
+    const channels = (baData && baData.channels) || [];
+
+    document.getElementById('ba-bots').innerHTML = bots.map(b => `
+        <label class="chip ba-bot-chip" style="width:auto">
+            <input type="checkbox" class="ba-bot-cb" value="${escapeHtmlAttr(String(b.user_id))}" checked>
+            <span class="min-w-0">
+                <span class="c-name block">${escapeHtml(b.name)}${b.is_main ? ' <span class="c-id">(main)</span>' : ''}</span>
+                <span class="c-id">${b.username ? '@' + escapeHtml(b.username) : escapeHtml(String(b.user_id))}</span>
+            </span>
+        </label>
+    `).join('') || '<span class="hint">No bots detected.</span>';
+
+    const wrap = document.getElementById('ba-channels');
+    if (!channels.length) {
+        wrap.innerHTML = `<div class="hint" style="padding:0.5rem 0">
+            No bot-served channels configured. Add auth / manual / anime / announce / skip channels in
+            <a href="/admin/settings" style="color:var(--primary)">Settings</a>.</div>`;
+        return;
+    }
+
+    wrap.innerHTML = channels.map(ch => {
+        const roles = (ch.roles || []).map(r => `<span class="ba-role">${escapeHtml(r)}</span>`).join('');
+        const session = BA_SESSION[ch.session_status] || BA_SESSION.unknown;
+        const disabled = ch.manageable ? '' : 'disabled';
+        const reason = (!ch.manageable && ch.reason)
+            ? `<div class="hint" style="color:var(--warn);margin-top:0.5rem"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(ch.reason)}</div>` : '';
+        const botStats = bots.map(b => `
+            <div class="ba-bstat">
+                <span class="n">${escapeHtml(b.name)}</span>
+                ${BA_STAT[ch.bots[String(b.user_id)]] || BA_STAT.missing}
+            </div>`).join('');
+        const orphans = (ch.orphans || []).length
+            ? `<div class="hint" style="margin-top:0.5rem"><i class="fa-solid fa-user-slash ba-warn"></i> Orphan admins: ${
+                ch.orphans.map(o => escapeHtml(o.name || String(o.user_id))).join(', ')}</div>` : '';
+        return `
+        <div class="ba-ch-card${ch.manageable ? '' : ' ba-locked'}">
+            <div class="ba-ch-top">
+                <label class="ba-ch-sel">
+                    <input type="checkbox" class="ba-ch-cb" value="${escapeHtmlAttr(ch.id)}" ${disabled} onchange="onBaChipChange(this)">
+                    <span class="min-w-0">
+                        <span class="ba-ch-name">${escapeHtml(ch.name)}</span>
+                        <span class="ba-ch-id block">${escapeHtml(ch.id)}</span>
+                    </span>
+                </label>
+                <span style="flex-shrink:0">${session}</span>
+            </div>
+            <div class="ba-roles" style="margin-top:0.5rem">${roles}</div>
+            <div class="ba-bot-grid">${botStats}</div>
+            ${orphans}
+            ${reason}
+        </div>`;
+    }).join('');
+}
+
+function onBaChipChange(input) {
+    input.closest('.ba-ch-card').classList.toggle('selected', input.checked);
+}
+function selectAllBaChannels(state) {
+    document.querySelectorAll('#ba-channels .ba-ch-cb:not([disabled])').forEach(cb => {
+        cb.checked = state; onBaChipChange(cb);
+    });
+}
+function getSelectedBaChannels() {
+    return [...document.querySelectorAll('#ba-channels .ba-ch-cb:checked')].map(cb => cb.value);
+}
+function getSelectedBaBots() {
+    return [...document.querySelectorAll('#ba-bots .ba-bot-cb:checked')].map(cb => cb.value);
+}
+
+async function applyBotAdmin() {
+    const channels = getSelectedBaChannels();
+    const botIds = getSelectedBaBots();
+    const demote = document.getElementById('ba-demote-orphans').checked;
+
+    if (!channels.length) { showToast('Select at least one channel.', 'error', 'Bot Admin'); return; }
+    if (!botIds.length) { showToast('Select at least one bot to add.', 'error', 'Bot Admin'); return; }
+
+    let msg = `Add ${botIds.length} bot(s) as admin to ${channels.length} channel(s)?`;
+    if (demote) msg += '\n\nOrphan bot-admins (not in your token list) will also be demoted.';
+    if (!confirm(msg)) return;
+
+    const btn = document.getElementById('ba-apply-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying…';
+    document.getElementById('ba-results').style.display = 'none';
+    try {
+        const res = await fetch('/api/admin/tools/bot-admin/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel_ids: channels, bot_ids: botIds, demote_orphans: demote })
+        });
+        const data = await res.json();
+        if (!res.ok || (data.status !== 'started' && data.status !== 'success')) {
+            showToast(data.detail || data.message || 'Could not start.', 'error', 'Bot Admin');
+            resetBaApplyBtn();
+            return;
+        }
+        const total = data.total || channels.length;
+        const prog = document.getElementById('ba-progress');
+        prog.style.display = '';
+        setText('ba-prog-total', total);
+        setText('ba-prog-done', 0);
+        document.getElementById('ba-prog-bar').style.width = '0%';
+        startBaApplyPolling();
+    } catch (e) {
+        showToast('Could not reach the server.', 'error', 'Bot Admin');
+        resetBaApplyBtn();
+    }
+}
+
+function resetBaApplyBtn() {
+    const btn = document.getElementById('ba-apply-btn');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add selected bots as admin';
+}
+
+function startBaApplyPolling() {
+    if (baApplyTimer) clearInterval(baApplyTimer);
+    pollBaApply();
+    baApplyTimer = setInterval(pollBaApply, 1500);
+}
+
+async function pollBaApply() {
+    let data;
+    try {
+        const res = await fetch('/api/admin/tools/bot-admin/apply/status');
+        data = (await res.json()).data;
+    } catch (e) { return; }
+    if (!data) return;
+
+    const total = data.total || 0;
+    const done = data.done || 0;
+    setText('ba-prog-total', total);
+    setText('ba-prog-done', done);
+    document.getElementById('ba-prog-bar').style.width = (total ? Math.round((done / total) * 100) : 0) + '%';
+
+    if (data.running) return;
+
+    if (baApplyTimer) { clearInterval(baApplyTimer); baApplyTimer = null; }
+    setTimeout(() => { document.getElementById('ba-progress').style.display = 'none'; }, 1200);
+    resetBaApplyBtn();
+
+    if (data.state === 'error') {
+        showToast(data.error || 'Apply failed.', 'error', 'Bot Admin');
+    } else {
+        showToast('Done. See the report below.', 'success', 'Bot Admin');
+    }
+    renderBotAdminResults(data.results || []);
+    loadBotAdmin();
+}
+
+function renderBotAdminResults(results) {
+    const box = document.getElementById('ba-results');
+    if (!results.length) { box.style.display = 'none'; return; }
+    const icon = { added: '<i class="fa-solid fa-circle-check ba-ok"></i>', already: '<i class="fa-solid fa-circle-check ba-muted"></i>', demoted: '<i class="fa-solid fa-user-minus ba-warn"></i>', skipped: '<i class="fa-solid fa-forward ba-warn"></i>', error: '<i class="fa-solid fa-circle-xmark ba-no"></i>' };
+    box.style.display = '';
+    box.innerHTML = results.map(ch => `
+        <div class="ba-res-row">
+            <div class="font-semibold"><i class="fa-solid fa-hashtag ba-muted"></i> ${escapeHtml(ch.name)}</div>
+            ${(ch.items || []).map(it => `
+                <div style="display:flex;gap:0.5rem;align-items:flex-start;padding-left:1rem">
+                    ${icon[it.status] || ''}
+                    <span class="min-w-0"><span class="font-semibold">${escapeHtml(it.bot)}</span>
+                        <span class="c-id">— ${escapeHtml(it.message || it.status)}</span></span>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+}
+
+/* ─────────────── AniList Bulk Sync ─────────────── */
+async function startBulkAniListSync() {
+    const btn = document.getElementById('als-start-btn');
+    const msg = document.getElementById('als-message');
+    const pill = document.getElementById('als-status-pill');
+
+    if (!confirm('Sync AniList scores, studios, and anime status across your entire library?')) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Syncing with AniList…';
+    pill.className = 'status-pill status-running';
+    pill.textContent = 'Syncing';
+    msg.style.display = '';
+    msg.textContent = 'Scanning database and fetching anime metadata from AniList GraphQL API…';
+
+    try {
+        const res = await fetch('/api/admin/tools/anime/bulk-sync', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            msg.textContent = data.message || 'AniList sync completed.';
+            pill.className = 'status-pill status-completed';
+            pill.textContent = 'Completed';
+            showToast(data.message || 'AniList sync complete!', 'success', 'AniList Sync');
+        } else {
+            msg.textContent = data.detail || 'Sync failed.';
+            pill.className = 'status-pill status-error';
+            pill.textContent = 'Error';
+            showToast(data.detail || 'Sync failed.', 'error', 'Error');
+        }
+    } catch (e) {
+        msg.textContent = 'Network error while syncing.';
+        pill.className = 'status-pill status-error';
+        pill.textContent = 'Error';
+        showToast('Network error.', 'error', 'Error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Sync All Anime with AniList';
+    }
+}
+
+/* ─────────────── Nyaa Batch Topic Resolver ─────────────── */
+let _currentNyaaPlan = null;
+
+function clearNyaaInputs() {
+    document.getElementById('nyaa-url').value = '';
+    document.getElementById('nyaa-start-msg').value = '';
+    document.getElementById('nyaa-end-msg').value = '';
+    document.getElementById('nyaa-tmdb').value = '';
+    document.getElementById('nyaa-plan-box').classList.add('hidden');
+    _currentNyaaPlan = null;
+}
+
+async function inspectNyaaPlan() {
+    const url = document.getElementById('nyaa-url').value.trim();
+    const startMsg = document.getElementById('nyaa-start-msg').value.trim();
+    const endMsg = document.getElementById('nyaa-end-msg').value.trim() || startMsg;
+    const channel = document.getElementById('nyaa-channel').value;
+    const tmdbOverride = document.getElementById('nyaa-tmdb').value.trim();
+    const btn = document.getElementById('nyaa-inspect-btn');
+
+    if (!url && !tmdbOverride) {
+        showToast('Please enter either a TMDb ID (e.g. 64710) or a Nyaa.si torrent URL.', 'error', 'Batch Resolver');
+        return;
+    }
+    const startMsgId = parseTgInput(startMsg);
+    const endMsgId = parseTgInput(endMsg) || startMsgId;
+
+    if (!startMsgId) {
+        showToast('Please enter a valid start message ID or Telegram link.', 'error', 'Batch Resolver');
+        return;
+    }
+
+    autoSelectChannelIfPresent('nyaa-channel', startMsg);
+    autoSelectChannelIfPresent('nyaa-channel', endMsg);
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Inspecting Messages &amp; Resolving…';
+
+    try {
+        const res = await fetch('/api/tools/nyaa/inspect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: url || null,
+                start_msg_id: startMsgId,
+                end_msg_id: endMsgId,
+                channel_id: document.getElementById('nyaa-channel').value || channel,
+                override_tmdb_id: tmdbOverride || null,
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.detail || 'Inspection failed');
+        }
+
+        _currentNyaaPlan = data;
+        renderNyaaPlan(data);
+        showToast(`Matched ${data.aligned_count} of ${data.media_found_count} media files!`, 'success', 'Alignment Ready');
+    } catch (e) {
+        showToast(e.message || 'Failed to inspect batch.', 'error', 'Error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Inspect &amp; Preview Plan';
+    }
+}
+
+function renderNyaaPlan(data) {
+    const box = document.getElementById('nyaa-plan-box');
+    const titleEl = document.getElementById('nyaa-plan-title');
+    const subEl = document.getElementById('nyaa-plan-sub');
+    const listEl = document.getElementById('nyaa-items-list');
+
+    const meta = data.metadata || {};
+    const manifest = data.manifest || {};
+
+    titleEl.textContent = `🎬 ${meta.title || manifest.clean_title} (Season ${manifest.season || 1})`;
+    subEl.textContent = `TMDb: ${meta.tmdb_id || 'N/A'} · Group: ${manifest.group || 'Unknown'} · Quality: ${manifest.quality_tags || 'HD'} · ${data.aligned_count} Episodes Aligned`;
+
+    const items = data.items || [];
+    if (!items.length) {
+        listEl.innerHTML = '<div class="hint">No media files found in that message range.</div>';
+    } else {
+        listEl.innerHTML = items.map(it => `
+            <div class="dead-row" style="padding:0.75rem 1rem;align-items:flex-start;">
+                <div style="flex:1;min-width:0;">
+                    <div class="flex items-center gap-2 flex-wrap mb-1">
+                        <span class="badge" style="background:var(--primary);color:#fff;padding:0.15rem 0.5rem;border-radius:0.4rem;font-size:0.72rem;font-weight:700;">Msg ${it.msg_id}</span>
+                        <span class="badge" style="background:rgba(255,255,255,0.1);padding:0.15rem 0.5rem;border-radius:0.4rem;font-size:0.72rem;font-family:monospace;">${it.original_filename}</span>
+                        <span style="font-size:0.75rem;color:var(--text-sec);">${it.readable_size}</span>
+                    </div>
+                    <div style="font-size:0.82rem;font-weight:700;color:#22c55e;font-family:monospace;word-break:break-all;">
+                        ${escapeHtml(it.proposed_caption)}
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <span class="status-pill status-${it.status === 'ready' ? 'completed' : 'idle'}" style="font-size:0.7rem;">
+                        ${it.status === 'ready' ? '✓ Ready' : 'Ambiguous'}
+                    </span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    box.classList.remove('hidden');
+}
+
+async function executeNyaaResolution() {
+    if (!_currentNyaaPlan || !_currentNyaaPlan.items || !_currentNyaaPlan.items.length) {
+        showToast('Please inspect a Nyaa batch first.', 'error', 'Execution');
+        return;
+    }
+
+    const btn = document.getElementById('nyaa-exec-btn');
+    const label = document.getElementById('nyaa-exec-label');
+    const channel = document.getElementById('nyaa-channel').value;
+    const updateCaps = document.getElementById('nyaa-update-caps').checked;
+    const directIdx = document.getElementById('nyaa-direct-idx').checked;
+
+    btn.disabled = true;
+    label.textContent = 'Resolving & Indexing…';
+
+    try {
+        const res = await fetch('/api/tools/nyaa/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                channel_id: channel,
+                plan: _currentNyaaPlan,
+                update_captions: updateCaps,
+                direct_index: directIdx
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Execution failed');
+
+        const r = data.results || {};
+        showToast(`Successfully processed ${r.total} items! (${r.captioned} captioned, ${r.indexed} indexed)`, 'success', 'Batch Resolved');
+        label.textContent = '✓ Completed';
+    } catch (e) {
+        showToast(e.message || 'Execution failed.', 'error', 'Error');
+        label.textContent = 'Resolve & Index All';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/* ─────────────── Gap Reconciliation Tool ─────────────── */
+let _gapReport = { missing: [], misplaced: [], present: [] };
+let _gapChannels = [];
+
+async function loadGapChannels() {
+    const list = document.getElementById('gap-channel-list');
+    const loading = document.getElementById('gap-channels-loading');
+    try {
+        const res = await fetch('/api/admin/tools/channels');
+        const data = await res.json();
+        const channels = (data && data.data) || [];
+        if (!channels.length) {
+            list.innerHTML = `<div class="hint">No AUTH channels configured. Add them in Settings.</div>`;
+            return;
+        }
+        _gapChannels = channels;
+        loading.style.display = 'none';
+        list.innerHTML = channels.map(c => `
+            <label class="chip" data-id="${escapeHtmlAttr(c.id)}">
+                <input type="checkbox" value="${escapeHtmlAttr(c.id)}" onchange="onGapChipChange(this)">
+                <span class="min-w-0">
+                    <span class="c-name block">${escapeHtml(c.name)}</span>
+                    <span class="c-id">${escapeHtml(c.id)}</span>
+                </span>
+            </label>
+        `).join('');
+    } catch (e) {
+        list.innerHTML = `<div class="hint" style="color:#ef4444">Failed to load channels.</div>`;
+    }
+}
+
+function onGapChipChange(input) {
+    input.closest('.chip').classList.toggle('selected', input.checked);
+}
+function selectAllGapChannels(state) {
+    document.querySelectorAll('#gap-channel-list input[type=checkbox]').forEach(cb => {
+        cb.checked = state;
+        onGapChipChange(cb);
+    });
+}
+function getSelectedGapChannels() {
+    return [...document.querySelectorAll('#gap-channel-list input[type=checkbox]:checked')].map(cb => cb.value);
+}
+
+async function runGapCheck() {
+    const channels = getSelectedGapChannels();
+    if (!channels.length) {
+        showToast('Select at least one channel to scan.', 'error', 'No channels');
+        return;
+    }
+    const btn = document.getElementById('gap-check-btn');
+    const box = document.getElementById('gap-report-box');
+    const titleEl = document.getElementById('gap-report-title');
+    const subEl = document.getElementById('gap-report-sub');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning Telegram…';
+    box.classList.add('hidden');
+    document.getElementById('gap-apply-btn').disabled = true;
+
+    try {
+        const res = await fetch('/api/admin/tools/gap/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channels }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Gap check failed');
+
+        _gapReport = {
+            missing: data.missing_files || [],
+            misplaced: data.misplaced_files || [],
+            present: data.present_files || [],
+        };
+
+        titleEl.textContent = `Gap Report - ${data.total} files from ${data.channels_scanned} channel(s)`;
+        subEl.textContent = `${data.missing} missing · ${data.misplaced} misplaced · ${data.present} present`;
+        document.getElementById('gap-missing').textContent = data.missing;
+        document.getElementById('gap-misplaced').textContent = data.misplaced;
+        document.getElementById('gap-present').textContent = data.present;
+
+        renderGapLists();
+        box.classList.remove('hidden');
+        document.getElementById('gap-apply-btn').disabled = (_gapReport.missing.length + _gapReport.misplaced.length) === 0;
+
+        let msg = `Gap check complete: ${data.missing} missing, ${data.misplaced} misplaced (${data.total} files scanned).`;
+        if (data.scan_errors && data.scan_errors.length) {
+            msg += ` ${data.scan_errors.length} channel(s) had errors - see console.`;
+        }
+        showToast(msg, data.scan_errors && data.scan_errors.length ? 'warning' : 'success', 'Gap Reconciliation');
+    } catch (e) {
+        showToast(e.message || 'Gap check failed.', 'error', 'Gap Reconciliation');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Check for Gaps';
+    }
+}
+
+function renderGapLists() {
+    const missingList = document.getElementById('gap-missing-list');
+    const misplacedList = document.getElementById('gap-misplaced-list');
+
+    missingList.innerHTML = '';
+    misplacedList.innerHTML = '';
+
+    if (_gapReport.missing.length) {
+        missingList.innerHTML = `
+            <div class="dead-row" style="background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.2)">
+                <div style="flex:1;min-width:0"><strong style="color:#ef4444">MISSING - ${_gapReport.missing.length} file(s) not indexed</strong></div>
+            </div>
+            ${_gapReport.missing.map(r => `
+                <div class="dead-row">
+                    <span class="min-w-0 truncate">
+                        <i class="fa-solid fa-file-circle-question ba-no"></i>
+                        ${escapeHtml(r.title)}
+                        ${r.season !== null && r.episode !== null ? `<span class="c-id"> · S${r.season.toString().padStart(2,'0')}E${r.episode}</span>` : ''}
+                        <span class="c-id" style="font-size:0.65rem"> · ${escapeHtml(r.file_name)}</span>
+                    </span>
+                </div>
+            `).join('')}
+        `;
+    }
+
+    if (_gapReport.misplaced.length) {
+        misplacedList.innerHTML = `
+            <div class="dead-row" style="background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.2)">
+                <div style="flex:1;min-width:0"><strong style="color:#f59e0b">MISPLACED - ${_gapReport.misplaced.length} file(s) wrong SxE in DB</strong></div>
+            </div>
+            ${_gapReport.misplaced.map(r => `
+                <div class="dead-row">
+                    <span class="min-w-0 truncate">
+                        <i class="fa-solid fa-arrow-right-arrow-left ba-warn"></i>
+                        ${escapeHtml(r.title)}
+                        ${r.season !== null && r.episode !== null ? `<span class="c-id"> · S${r.season.toString().padStart(2,'0')}E${r.episode}</span>` : ''}
+                        <span class="c-id" style="font-size:0.65rem"> · ${escapeHtml(r.file_name)}</span>
+                    </span>
+                </div>
+            `).join('')}
+        `;
+    }
+}
+
+async function applyGaps() {
+    const gaps = [..._gapReport.missing, ..._gapReport.misplaced];
+    if (!gaps.length) return;
+
+    const btn = document.getElementById('gap-apply-btn');
+    if (!confirm(`Index ${gaps.length} gap file(s) into MongoDB? Only gaps will be touched.`)) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Indexing gaps…';
+
+    try {
+        const res = await fetch('/api/admin/tools/gap/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gaps }),
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast(`Indexed ${data.applied} gap file(s).`, 'success', 'Gap Apply');
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Indexed';
+            _gapReport.missing = [];
+            _gapReport.misplaced = [];
+            renderGapLists();
+            btn.disabled = true;
+        } else {
+            showToast(data.message || data.detail || 'Gap apply failed.', 'error', 'Gap Apply');
+        }
+    } catch (e) {
+        showToast('Network error during gap apply.', 'error', 'Gap Apply');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function clearGapReport() {
+    _gapReport = { missing: [], misplaced: [], present: [] };
+    document.getElementById('gap-report-box').classList.add('hidden');
+    document.getElementById('gap-apply-btn').disabled = true;
+    document.getElementById('gap-missing-list').innerHTML = '';
+    document.getElementById('gap-misplaced-list').innerHTML = '';
+    showToast('Gap report cleared.', 'info', 'Gap Reconciliation');
+}
+
+/* ─────────────── Jellyfin & AniList Automated Sync Tool ─────────────── */
+async function loadJellyfinTokens() {
+    const sel = document.getElementById('jf-token-select');
+    if (!sel) return;
+    try {
+        const res = await fetch('/api/admin/access/tokens');
+        if (res.ok) {
+            const data = await res.json();
+            const tokens = data.tokens || [];
+            if (tokens.length > 0) {
+                sel.innerHTML = tokens.map(t => `<option value="${escapeHtmlAttr(t.token)}">${escapeHtml(t.name || 'Default')} (${t.token.slice(0, 8)}...)</option>`).join('');
+                return;
+            }
+        }
+    } catch (_) {}
+    sel.innerHTML = '<option value="">Default Token</option>';
+}
+
+async function startSyncAllServer() {
+    const btn = document.getElementById('sync-all-btn');
+    const pill = document.getElementById('jf-status-pill');
+    const targetDir = document.getElementById('jf-target-dir').value.trim() || './jellyfin_library';
+    const token = document.getElementById('jf-token-select').value;
+    const syncAnilist = document.getElementById('sync-anilist-check') ? document.getElementById('sync-anilist-check').checked : true;
+    const syncJellyfin = document.getElementById('sync-jellyfin-check') ? document.getElementById('sync-jellyfin-check').checked : true;
+    const statsBox = document.getElementById('jf-stats-box');
+
+    btn.disabled = true;
+    pill.className = 'status-pill status-running';
+    pill.textContent = 'Syncing All...';
+
+    try {
+        const res = await fetch('/api/tools/sync_all', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                target_dir: targetDir,
+                token: token,
+                sync_anilist: syncAnilist,
+                sync_jellyfin: syncJellyfin
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Full sync failed');
+
+        pill.className = 'status-pill status-idle';
+        pill.textContent = 'Completed';
+
+        const r = data.results || {};
+        const jf = r.jellyfin || {};
+        const al = r.anilist || {};
+
+        showToast(`Sync completed in ${r.elapsed_seconds || 0}s!`, 'success', 'Server Sync Complete');
+
+        if (statsBox) {
+            statsBox.style.display = 'block';
+            document.getElementById('jf-stats-title').textContent = `✓ Full Server Sync Complete (${r.elapsed_seconds || 0}s)`;
+            
+            let details = '';
+            if (al.updated_titles !== undefined) {
+                details += `• 🌟 AniList: Enriched ${al.updated_titles} anime titles (scanned ${al.scanned_titles})\n`;
+            }
+            if (jf.total_files !== undefined) {
+                details += `• 🎬 Jellyfin: Synced ${jf.total_files} files (${jf.strm_files} .strm, ${jf.nfo_files} .nfo)\n• Destination: ${jf.target_dir}`;
+            }
+            document.getElementById('jf-stats-detail').textContent = details || 'Sync completed successfully.';
+        }
+    } catch (e) {
+        pill.className = 'status-pill status-error';
+        pill.textContent = 'Error';
+        showToast(e.message || 'Sync failed', 'error', 'Sync Error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function startJellyfinSync() {
+    const btn = document.getElementById('jf-sync-btn');
+    const pill = document.getElementById('jf-status-pill');
+    const targetDir = document.getElementById('jf-target-dir').value.trim() || './jellyfin_library';
+    const token = document.getElementById('jf-token-select').value;
+    const includeNfos = document.getElementById('jf-include-nfos').checked;
+    const statsBox = document.getElementById('jf-stats-box');
+
+    btn.disabled = true;
+    pill.className = 'status-pill status-running';
+    pill.textContent = 'Syncing...';
+
+    try {
+        const res = await fetch('/api/tools/jellyfin/sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                target_dir: targetDir,
+                token: token,
+                include_nfos: includeNfos
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Jellyfin sync failed');
+
+        pill.className = 'status-pill status-idle';
+        pill.textContent = 'Completed';
+        showToast(`Synced ${data.stats.total_files} files to ${data.stats.target_dir}`, 'success', 'Jellyfin Sync Complete');
+
+        if (statsBox) {
+            statsBox.style.display = 'block';
+            document.getElementById('jf-stats-title').textContent = `✓ Successfully synced ${data.stats.total_files} files`;
+            document.getElementById('jf-stats-detail').textContent = `• STRM stream files: ${data.stats.strm_files} | • NFO metadata files: ${data.stats.nfo_files}\n• Destination: ${data.stats.target_dir}`;
+        }
+    } catch (e) {
+        pill.className = 'status-pill status-error';
+        pill.textContent = 'Error';
+        showToast(e.message || 'Sync failed', 'error', 'Jellyfin Sync Error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function downloadJellyfinZip() {
+    const token = document.getElementById('jf-token-select').value;
+    const includeNfos = document.getElementById('jf-include-nfos').checked;
+    const url = `/api/tools/jellyfin/download?token=${encodeURIComponent(token)}&include_nfos=${includeNfos}`;
+    window.location.href = url;
+}
+
+/* ─────────────── Nuvio & Stremio Integration ─────────────── */
+function getActiveManifestUrl() {
+    const sel = document.getElementById('jf-token-select');
+    const token = (sel && sel.value) ? sel.value : 'default';
+    const origin = window.location.origin;
+    return `${origin}/stremio/${token}/manifest.json`;
+}
+
+function copyNuvioManifest() {
+    const url = getActiveManifestUrl();
+    navigator.clipboard.writeText(url).then(() => {
+        const lbl = document.getElementById('nuvio-copy-lbl');
+        if (lbl) lbl.textContent = 'Copied to Clipboard!';
+        showToast('Manifest URL copied! In Nuvio: Go to Settings → Add-ons → Add Add-on and paste.', 'success', 'Nuvio Setup');
+        setTimeout(() => { if (lbl) lbl.textContent = 'Copy Manifest for Nuvio'; }, 2500);
+    }).catch(() => {
+        prompt('Copy Manifest URL for Nuvio:', url);
+    });
+}
+
+function copyStremioManifest() {
+    const url = getActiveManifestUrl();
+    navigator.clipboard.writeText(url).then(() => {
+        showToast('Stremio Manifest URL copied to clipboard!', 'success', 'Stremio Setup');
+    }).catch(() => {
+        prompt('Copy Manifest URL for Stremio:', url);
+    });
+}
+
+function installInStremio() {
+    const url = getActiveManifestUrl();
+    const cleanUrl = url.replace(/^https?:\/\//, '');
+    window.location.href = `stremio://${cleanUrl}`;
+}
+
+/* ─────────────── Utils ─────────────── */
+function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function escapeHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function escapeHtmlAttr(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+/* ─────────────── Init ─────────────── */
+['nyaa-start-msg', 'nyaa-end-msg'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+        const val = el.value.trim();
+        if (val.includes('t.me/') || val.includes('tg://')) {
+            autoSelectChannelIfPresent('nyaa-channel', val);
+        }
+    });
+});
+loadManualSession();
+loadChannels();
+loadJellyfinTokens();
+loadGapChannels();
+pollScan().then(() => {
+    const pill = document.getElementById('scan-status-pill');
+    if (pill.classList.contains('status-running')) startScanPolling();
+});
+pollDbc().then(() => {
+    const pill = document.getElementById('dbc-status-pill');
+    if (pill.classList.contains('status-running')) startDbcPolling();
+});
+pollDup().then(() => {
+    const pill = document.getElementById('dup-status-pill');
+    if (pill.classList.contains('status-running')) startDupPolling();
+});
+if (document.getElementById('ba-body')) loadBotAdmin();
+</script>
+
+{% endblock %}

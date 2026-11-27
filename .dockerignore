@@ -1,0 +1,51 @@
+# Git
+.git/
+.gitattributes
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Runtime config and secrets
+config.env
+.env
+*.env
+!sample_config.env
+*.session
+*.session-journal
+*.session-shm
+*.session-wal
+.season2mpv_config.json
+
+# Logs and downloaded data
+log.txt
+*.log
+media/
+*.strm
+jellyfin_library/
+
+# Metadata caches (rebuilt on first run)
+Backend/helper/metadata/.episode_maps_cache/
+nyaa_cache.json
+
+# Archives
+*.zip
+
+# OS / IDEs
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Not needed in the runtime image
+tests/
+docs/
+.github/

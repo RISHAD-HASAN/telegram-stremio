@@ -1,0 +1,11 @@
+# Keeps the commit pins of the GitHub Actions in .github/workflows current.
+# Python packages are not bumped automatically: requirements.txt and uv.lock
+# have to change together (see docs/architecture.md). Advisories for them are
+# reported by the "advisories" job of the test workflow and by Dependabot
+# alerts, which are switched on in the repository settings.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

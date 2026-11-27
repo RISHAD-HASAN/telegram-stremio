@@ -1,0 +1,54 @@
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Runtime config and secrets
+config.env
+.env
+*.session
+*.session-journal
+*.session-shm
+*.session-wal
+.season2mpv_config.json
+
+# Logs and downloaded data
+log.txt
+*.log
+media/
+*.strm
+jellyfin_library/
+
+# Metadata datasets are downloaded automatically on first run
+Backend/helper/metadata/.episode_maps_cache/
+
+# Archives
+*.zip
+
+# Runtime caches
+nyaa_cache.json
+
+# Channel dumps and reports written by the offline tools
+uploads/
+filenames_report.*
+*_parse.tsv
+indexer_report*
+gap_report*
+diagnose_output/
+reindex_output/
+nyaa_repair_report*
+nyaa_resolution_report.*
+nyaa_fix_backup_*.json
+repair_report*
+
+# OS / IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

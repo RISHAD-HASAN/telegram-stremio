@@ -1,0 +1,55 @@
+[project]
+name = "Telegram-Stremio"
+version = "5.3.5"
+description = "Index media from Telegram channels and stream it through Stremio, MPV or M3U8 playlists."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiofiles>=24.1.0",
+    "aiohttp>=3.14.5",
+    "fastapi>=0.165.0",
+    "guessit>=3.8.0",
+    "httptools>=0.8.0",
+    "httpx>=0.28.1",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
+    "motor>=3.7.0",
+    "parse-torrent-title>=2.8.1",
+    "pyrofork>=2.3.61",
+    "python-dotenv>=1.1.0",
+    "python-multipart>=0.0.34",
+    "pytz>=2025.2",
+    "rapidfuzz>=3.14.5",
+    "requests>=2.32.3",
+    # Named although fastapi brings it in: older releases have open advisories.
+    "starlette>=1.10.0",
+    "pyaes>=1.6.1",
+    "themoviedb>=2.0.0",
+    "uvicorn>=0.34.2",
+    "uvloop>=0.22.1; sys_platform != 'win32'",
+]
+
+# Optional native extensions. Each ships compiled wheels only (no source
+# distribution), so platforms or Python builds without a wheel cannot install
+# them. The app runs without either:
+# - PyroTgCrypto: pyrofork falls back to the pure-Python pyaes crypto.
+# - zstandard: episode mapping falls back from the compressed feed to plain JSON.
+[project.optional-dependencies]
+fast = [
+    "PyroTgCrypto>=1.2.7",
+]
+zstd = [
+    "zstandard>=0.25.0",
+]
+
+[dependency-groups]
+dev = [
+    "deptry>=0.23.1",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests", "Backend/tests"]
+pythonpath = [".", "tools"]

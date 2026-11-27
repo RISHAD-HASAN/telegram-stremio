@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Telegram Stremio{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <header class="flex flex-wrap items-end justify-between gap-4">
+        <div class="min-w-0">
+            <h1 class="text-[28px] sm:text-3xl font-semibold leading-tight">Overview</h1>
+            <p class="text-text-secondary text-sm mt-1">Your Telegram channels as a Stremio addon</p>
+        </div>
+        <button onclick="refreshDashboard()" class="btn-ghost px-4 py-2 text-sm">
+            <i id="refresh-icon" class="fa-solid fa-arrows-rotate"></i> Refresh
+        </button>
+    </header>
+
+    <div id="setup-card" class="empty:hidden"></div>
+
+    <section>
+        <h2 class="label-caps mb-2.5 px-1">Server</h2>
+        <div class="glass-panel p-5">
+            <div class="flex items-center gap-3 pb-4 mb-4 border-b border-border">
+                <span class="w-2 h-2 rounded-full {{ 'bg-ok' if system_stats.server_status == 'running' else 'bg-danger' }} shrink-0"></span>
+                <div class="min-w-0">
+                    <p class="font-medium leading-tight">{{ 'Addon server running' if system_stats.server_status == 'running' else 'Server needs attention' }}</p>
+                    <p class="text-sm text-text-secondary truncate">{{ system_stats.telegram_bot }} · {{ system_stats.total_databases }} database{{ '' if system_stats.total_databases == 1 else 's' }}</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-y-4 gap-x-6">
+                <div class="min-w-0"><p id="sys-uptime" class="text-xl font-semibold tabular truncate">{{ system_stats.uptime or 'N/A' }}</p><p class="text-sm text-text-secondary">Uptime</p></div>
+                <div class="min-w-0"><p class="text-xl font-semibold tabular"><span id="sys-bots-count">{{ system_stats.connected_bots|default(0) }}</span></p><p class="text-sm text-text-secondary">Bots</p></div>
+                <div class="min-w-0"><p class="text-xl font-semibold tabular"><span id="sys-live-streams">{{ system_stats.total_active_streams }}</span></p><p class="text-sm text-text-secondary">Live streams</p></div>
+                <div class="min-w-0"><p id="sys-version" class="text-xl font-semibold tabular truncate">v{{ system_stats.version }}</p><p class="text-sm text-text-secondary">Version</p></div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="label-caps mb-2.5 px-1">Library</h2>
+        <div class="glass-panel p-5">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-y-4 gap-x-6">
+                <div><p class="text-xl font-semibold tabular">{{ system_stats.movies }}</p><p class="text-sm text-text-secondary">Movies</p></div>
+                <div><p class="text-xl font-semibold tabular">{{ system_stats.tv_shows }}</p><p class="text-sm text-text-secondary">Series</p></div>
+                <div><p class="text-xl font-semibold tabular">{{ system_stats.total_databases }}</p><p class="text-sm text-text-secondary">Storage nodes</p></div>
+                <div><p class="text-xl font-semibold tabular">{{ "%.1f"|format((system_stats.databases|sum(attribute='storageSize')) / 1048576) }} MB</p><p class="text-sm text-text-secondary">Index size</p></div>
+            </div>
+            {% if system_stats.databases %}
+            <div class="mt-4 pt-4 border-t border-border space-y-3">
+                {% for db_stat in system_stats.databases %}
+                {% set pct = [(db_stat.storageSize / (500 * 1024 * 1024) * 100) | round(1), 100] | min %}
+                <div class="flex items-center gap-4 text-sm">
+                    <span class="w-16 shrink-0 font-medium">{{ db_stat.db_name.replace("storage_", "Node ") }}</span>
+                    <span class="flex-1 h-1.5 rounded-full bg-card-high overflow-hidden"><span class="block h-full rounded-full bg-primary" style="width: {{ [pct, 1]|max }}%"></span></span>
+                    <span class="shrink-0 text-text-secondary tabular">{{ db_stat.movie_count }} / {{ db_stat.tv_count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section id="recent-wrap" hidden>
+        <div class="flex items-center justify-between mb-2.5 px-1">
+            <h2 class="label-caps">Recently added</h2>
+            <a href="/media/manage" class="text-sm text-primary hover:underline underline-offset-4">View all</a>
+        </div>
+        <div id="recent-row" class="poster-row"></div>
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        <div class="lg:col-span-3 space-y-8 min-w-0">
+            <section>
+                <h2 class="label-caps mb-2.5 px-1">Shortcuts</h2>
+                <div class="glass-panel overflow-hidden divide-y divide-border">
+                    <a href="/media/manage?media_type=movie" class="list-row"><i class="fa-solid fa-film"></i><span><b>Movies</b><small>Organize and edit the library</small></span><i class="fa-solid fa-chevron-right chev"></i></a>
+                    <a href="/media/manage?media_type=tv" class="list-row"><i class="fa-solid fa-tv"></i><span><b>TV shows</b><small>Seasons, episodes and files</small></span><i class="fa-solid fa-chevron-right chev"></i></a>
+                    <a href="/admin/access" class="list-row"><i class="fa-solid fa-key"></i><span><b>Tokens and access</b><small>Create tokens, set data limits and plans</small></span><i class="fa-solid fa-chevron-right chev"></i></a>
+                </div>
+            </section>
+
+            <section>
+                <div class="flex items-center justify-between gap-3 mb-2.5 px-1">
+                    <h2 class="label-caps">Viewers <span id="ua-online" class="ml-2 normal-case tracking-normal text-primary">0 online</span></h2>
+                    <button onclick="loadUserActivity()" class="text-sm text-text-secondary hover:text-text transition"><i class="fa-solid fa-rotate mr-1"></i>Refresh</button>
+                </div>
+            <script>
+                function uaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+                function uaFlag(cc) { if (!cc || cc.length !== 2) return ''; return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 127397 + c.charCodeAt(0))); }
+                function uaAgo(iso) {
+                    if (!iso) return '—';
+                    const t = new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime();
+                    const d = (Date.now() - t) / 1000;
+                    if (d < 60) return 'just now';
+                    if (d < 3600) return Math.floor(d / 60) + 'm ago';
+                    if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+                    return Math.floor(d / 86400) + 'd ago';
+                }
+                let uaPage = 1;
+                const uaPerPage = 5;
+                window.__UA_INITIAL__ = {{ user_activity_initial | tojson }};
+                function renderUaPagination(data) {
+                    const el = document.getElementById('ua-pagination');
+                    if (!el) return;
+                    const pages = data.total_pages || 1, cur = data.page || 1;
+                    if (pages <= 1) { el.innerHTML = ''; return; }
+                    el.innerHTML = `
+                        <button onclick="loadUserActivity(${cur - 1})" ${cur <= 1 ? 'disabled' : ''} class="icon-btn border border-border disabled:opacity-40" aria-label="Previous page"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                        <span class="text-sm text-text-secondary">Page ${cur} of ${pages} · ${data.total} users</span>
+                        <button onclick="loadUserActivity(${cur + 1})" ${cur >= pages ? 'disabled' : ''} class="icon-btn border border-border disabled:opacity-40" aria-label="Next page"><i class="fa-solid fa-chevron-right text-xs"></i></button>`;
+                }
+                function renderUserActivity(data) {
+                    const box = document.getElementById('ua-list');
+                    const users = data.users || [];
+                    document.getElementById('ua-online').textContent = (data.online_count || 0) + ' online';
+                    if (!users.length) { box.innerHTML = '<div class="glass-panel sm:col-span-2 p-6 text-center text-sm text-text-secondary">No viewers yet. Activity shows up here once someone streams.</div>'; renderUaPagination(data); return; }
+                    box.innerHTML = users.map(u => {
+                        const loc = [u.country, u.city].filter(Boolean).join(': ') || 'Unknown';
+                        const nowLine = u.now_playing
+                            ? `<div class="ua-now"><i class="fa-solid fa-play text-[10px] mr-1"></i>${uaEsc(u.now_playing)}</div>`
+                            : `<div class="text-text-secondary text-[13px] mt-2 truncate">${uaEsc(u.last_title || 'No history')}</div>`;
+                        const fl = uaFlag(u.country_code);
+                        return `<div class="ua-card glass-panel">
+                            <div class="flex items-center justify-between gap-2 min-w-0">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="ua-dot ${u.online ? 'on' : ''}"></span>
+                                    <span class="font-medium truncate">${uaEsc(u.name)}</span>
+                                </div>
+                                <span class="ua-tag ${u.proxy ? 'vpn' : ''}">${u.proxy ? 'VPN' : 'Direct'}</span>
+                            </div>
+                            ${nowLine}
+                            <div class="ua-meta">
+                                <span><i class="fa-solid fa-signal"></i> <span>${u.online ? 'Online' : uaAgo(u.last_active)}</span></span>
+                                <span><i class="fa-solid fa-location-dot"></i> <span>${fl ? fl + ' ' : ''}${uaEsc(loc)}</span></span>
+                                <span><i class="fa-solid fa-network-wired"></i> <span>${uaEsc(u.isp || '—')}</span></span>
+                                <span><i class="fa-solid fa-mobile-screen-button"></i> <span>${uaEsc(u.app)}${u.device ? ' · ' + uaEsc(u.device) : ''}</span></span>
+                                <span><i class="fa-solid fa-globe"></i> <span>${uaEsc(u.ip || '—')}</span></span>
+                                <span><i class="fa-solid fa-film"></i> <span>${u.streams} streams</span></span>
+                            </div>
+                        </div>`;
+                    }).join('');
+                    renderUaPagination(data);
+                }
+                function uaSkeleton() { return '<div class="ua-skel"></div>'; }
+                async function loadUserActivity(page, silent) {
+                    if (page) uaPage = page;
+                    const box = document.getElementById('ua-list');
+                    if (!box) return;
+                    if (!silent) box.innerHTML = uaSkeleton();
+                    try {
+                        const res = await fetch(`/api/admin/user-activity?page=${uaPage}&per_page=${uaPerPage}`);
+                        renderUserActivity(await res.json());
+                    } catch (e) {
+                        box.innerHTML = '<p class="text-text-secondary text-sm">Unable to load user activity.</p>';
+                    }
+                }
+                function uaInit() {
+                    if (window.__UA_INITIAL__ && (window.__UA_INITIAL__.users || []).length) renderUserActivity(window.__UA_INITIAL__);
+                    else loadUserActivity();
+                    setInterval(() => loadUserActivity(null, true), 15000);
+                }
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', uaInit); else uaInit();
+            </script>
+                <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="ua-skel"></div>
+                </div>
+                <div id="ua-pagination" class="flex items-center justify-center flex-wrap gap-3 mt-4"></div>
+            </section>
+        </div>
+
+        <section class="lg:col-span-2 min-w-0">
+            <div class="flex items-center justify-between gap-3 mb-2.5 px-1">
+                <h2 class="label-caps">Live network</h2>
+                <span id="live-stream-count" class="text-sm text-text-secondary">{{ system_stats.total_active_streams or 0 }} active</span>
+            </div>
+            <div class="glass-panel p-5">
+                <div class="grid grid-cols-2 gap-6 pb-4 mb-4 border-b border-border">
+                    <div><p id="live-now-count" class="text-xl font-semibold tabular">{{ system_stats.total_active_streams or 0 }}</p><p class="text-sm text-text-secondary">Live now</p></div>
+                    <div><p id="recent-stream-count" class="text-xl font-semibold tabular">0</p><p class="text-sm text-text-secondary">Recent</p></div>
+                </div>
+                <div id="active-streams-container" class="space-y-3"></div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<style>
+    .poster-row { display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding-bottom: 6px; scrollbar-width: none; }
+    .poster-row::-webkit-scrollbar { display: none; }
+    @media (min-width: 640px) { .poster-row { grid-auto-columns: 148px; } }
+    .poster { scroll-snap-align: start; min-width: 0; color: var(--text); text-decoration: none; }
+    .poster-img { position: relative; aspect-ratio: 2 / 3; border-radius: 14px; overflow: hidden; background: var(--card-high); }
+    .poster-img img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s var(--ease); }
+    .poster:hover .poster-img img { transform: scale(1.04); }
+    .poster-rating { position: absolute; top: 6px; right: 6px; padding: 2px 7px; border-radius: 99px; font-size: .72rem; color: #fff; background: rgba(0,0,0,.72); }
+    .poster-title { margin-top: .5rem; font-size: .88rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .poster-sub { font-size: .78rem; color: var(--text-sec); }
+
+    .list-row { display: flex; align-items: center; gap: 1rem; padding: .95rem 1.1rem; color: var(--text); text-decoration: none; transition: background-color .15s var(--ease); }
+    .list-row:hover { background: var(--surface); }
+    .list-row > i:first-child { width: 1.25rem; text-align: center; color: var(--primary); }
+    .list-row > span { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .list-row b { font-weight: 500; }
+    .list-row small { font-size: .82rem; color: var(--text-sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .list-row .chev { font-size: .75rem; color: var(--text-sec); transition: transform .2s var(--ease); }
+    .list-row:hover .chev { transform: translateX(3px); }
+
+    .ua-card { min-width: 0; padding: 1rem; }
+    .ua-dot { width: .5rem; height: .5rem; border-radius: 99px; background: var(--border); flex-shrink: 0; }
+    .ua-dot.on { background: var(--ok); }
+    .ua-tag { font-size: .7rem; padding: .1rem .5rem; border-radius: 99px; white-space: nowrap; border: 1px solid var(--border); color: var(--text-sec); }
+    .ua-tag.vpn { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+    .ua-skel { height: 132px; border-radius: var(--radius); border: 1px solid var(--border); background: linear-gradient(90deg, var(--card) 25%, var(--card-high) 37%, var(--card) 63%); background-size: 400% 100%; animation: ua-shimmer 1.4s ease infinite; }
+    @keyframes ua-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+    .ua-now { margin-top: .5rem; font-size: .82rem; color: var(--ok); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ua-meta { margin-top: .75rem; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: .35rem .75rem; font-size: .78rem; }
+    .ua-meta > span { display: flex; align-items: center; gap: .4rem; min-width: 0; color: var(--text-sec); }
+    .ua-meta > span i { width: .9rem; text-align: center; font-size: .7rem; }
+    .ua-meta > span span { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .stream-card { padding: 1rem; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); min-width: 0; }
+    .stream-badge-live { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+    .stream-badge-recent { background: var(--card-high); color: var(--text-sec); }
+</style>
+
+<script>
+    const streamState = { activeStreams: [] };
+
+    function escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) return '';
+        return String(unsafe)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatBytes(bytes) {
+        const value = Number(bytes || 0);
+        if (!value) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+        return (value / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 2) + ' ' + units[index];
+    }
+
+    function formatDuration(seconds) {
+        const total = Math.floor(Math.max(0, Number(seconds || 0)));
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    }
+
+    function formatTimestamp(ts) {
+        const value = Number(ts || 0);
+        if (!value) return '—';
+        const date = new Date(value * 1000);
+        return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+    }
+
+    function getStreamTitle(stream) {
+        return stream?.title || stream?.file_name || stream?.meta?.title || stream?.meta?.file_name || 'Unknown Stream';
+    }
+
+    function getStreamFileName(stream) {
+        const fn = stream?.file_name || stream?.meta?.file_name || '';
+        const title = stream?.title || stream?.meta?.title || '';
+        if (fn && title && fn !== title) return fn;
+        return '';
+    }
+
+    function getClientLabel(stream) {
+        const parts = [];
+        if (stream?.client_index !== null && stream?.client_index !== undefined) {
+            parts.push('Bot ' + (Number(stream.client_index) + 1));
+        }
+        if (stream?.dc_id !== null && stream?.dc_id !== undefined) {
+            parts.push('DC ' + stream.dc_id);
+        }
+        return parts.length ? parts.join(' • ') : 'Unknown node';
+    }
+
+    function getStatusBadge(status) {
+        const n = String(status || '').toLowerCase();
+        if (n === 'active') return { className: 'stream-badge-live', text: 'Live' };
+        if (n === 'cancelled') return { className: 'bg-yellow-500/15 text-yellow-300', text: 'Cancelled' };
+        if (n === 'completed' || n === 'finished') return { className: 'bg-green-500/15 text-green-300', text: 'Completed' };
+        if (n === 'failed' || n === 'error') return { className: 'bg-red-500/15 text-red-300', text: n.charAt(0).toUpperCase() + n.slice(1) };
+        return { className: 'stream-badge-recent', text: n ? n.charAt(0).toUpperCase() + n.slice(1) : 'Live' };
+    }
+
+    function getLiveDuration(stream) {
+        const startTs = Number(stream?.start_ts || 0);
+        if (!startTs) return '0s';
+        return formatDuration(Date.now() / 1000 - startTs);
+    }
+
+    function renderStreamCard(stream) {
+        const status = getStatusBadge(stream?.status);
+        const title = escapeHtml(getStreamTitle(stream));
+        const fileName = escapeHtml(getStreamFileName(stream));
+        const label = escapeHtml(getClientLabel(stream));
+        const avgSpeed = stream?.avg_mbps != null ? Number(stream.avg_mbps).toFixed(2) + ' MB/s' : '—';
+        return `
+            <div class="stream-card">
+                <div class="flex items-start justify-between gap-3 min-w-0">
+                    <div class="min-w-0">
+                        <p class="font-medium text-sm truncate" title="${title}">${title}</p>
+                        ${fileName ? `<p class="text-xs text-text-secondary truncate" title="${fileName}">${fileName}</p>` : ''}
+                    </div>
+                    <span class="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${status.className}">${escapeHtml(status.text)}</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
+                    <div class="min-w-0"><p class="text-text-secondary">Speed</p><p class="font-medium tabular truncate">${avgSpeed}</p></div>
+                    <div class="min-w-0"><p class="text-text-secondary">Sent</p><p class="font-medium tabular truncate">${escapeHtml(formatBytes(stream?.total_bytes || 0))}</p></div>
+                    <div class="min-w-0"><p class="text-text-secondary">Time</p><p class="font-medium tabular truncate live-duration">${escapeHtml(getLiveDuration(stream))}</p></div>
+                </div>
+                <p class="mt-3 pt-3 border-t border-border text-xs text-text-secondary truncate">${label} · <span class="font-mono">${escapeHtml(String(stream?.stream_id || '').slice(0, 12))}</span> · ${escapeHtml(formatTimestamp(stream?.start_ts))}</p>
+            </div>
+        `;
+    }
+
+    function renderEmptyState(icon, title, subtitle) {
+        return `
+            <div class="py-8 text-center">
+                <span class="mx-auto mb-3 grid place-items-center w-11 h-11 rounded-full bg-card-high text-text-secondary"><i class="${icon}"></i></span>
+                <p class="text-sm font-medium">${escapeHtml(title)}</p>
+                <p class="text-xs text-text-secondary mt-1">${escapeHtml(subtitle)}</p>
+            </div>
+        `;
+    }
+
+    async function loadRecent() {
+        const wrap = document.getElementById('recent-wrap');
+        const row = document.getElementById('recent-row');
+        try {
+            const [m, t] = await Promise.all(['movie', 'tv'].map(type =>
+                fetch(`/api/media/list?media_type=${type}&page_size=12`).then(r => r.ok ? r.json() : {}).catch(() => ({}))));
+            const items = [...(m.movies || m.media || []), ...(t.tv_shows || t.media || [])]
+                .filter(x => x && x.title)
+                .sort((a, b) => String(b.updated_on || '').localeCompare(String(a.updated_on || '')))
+                .slice(0, 14);
+            if (!items.length) return;
+            row.innerHTML = items.map(x => {
+                const type = x.media_type === 'tv' ? 'tv' : 'movie';
+                const href = `/media/edit?tmdb_id=${encodeURIComponent(x.tmdb_id)}&db_index=${encodeURIComponent(x.db_index)}&media_type=${type}`;
+                return `<a class="poster" href="${href}">
+                    <div class="poster-img">
+                        ${x.poster ? `<img src="${escapeHtml(x.poster)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : ''}
+                        ${x.rating ? `<span class="poster-rating">★ ${Number(x.rating).toFixed(1)}</span>` : ''}
+                    </div>
+                    <p class="poster-title">${escapeHtml(x.title)}</p>
+                    <p class="poster-sub">${escapeHtml(x.release_year || '')}${x.release_year ? ' · ' : ''}${type === 'tv' ? 'Series' : 'Movie'}</p>
+                </a>`;
+            }).join('');
+            wrap.hidden = false;
+        } catch (e) {}
+    }
+
+    async function loadStreamStats() {
+        const activeContainer = document.getElementById('active-streams-container');
+        const liveCount = document.getElementById('live-stream-count');
+        const liveNowCount = document.getElementById('live-now-count');
+        const recentCount = document.getElementById('recent-stream-count');
+
+        try {
+            const response = await fetch('/stream/stats', { cache: 'no-store' });
+            if (!response.ok) throw new Error('Failed to load stream stats');
+
+            const data = await response.json();
+            const activeStreams = Array.isArray(data.active_streams) ? data.active_streams : [];
+            const recentStreams = Array.isArray(data.recent_streams) ? data.recent_streams : [];
+
+            streamState.activeStreams = activeStreams;
+
+            if (liveCount) liveCount.textContent = activeStreams.length + ' active';
+            if (liveNowCount) liveNowCount.textContent = String(activeStreams.length);
+            if (recentCount) recentCount.textContent = String(recentStreams.length);
+
+            if (activeContainer) {
+                activeContainer.innerHTML = activeStreams.length
+                    ? activeStreams.map(stream => renderStreamCard(stream)).join('')
+                    : renderEmptyState('fa-solid fa-satellite-dish', 'No active streams right now', 'The live network is idle at the moment.');
+            }
+        } catch (error) {
+            console.error(error);
+            if (activeContainer) {
+                activeContainer.innerHTML = renderEmptyState('fa-solid fa-triangle-exclamation', 'Unable to load live network', 'Please try refreshing the page.');
+            }
+        }
+    }
+
+    function refreshLiveDurations() {
+        document.querySelectorAll('#active-streams-container .stream-card').forEach((card, index) => {
+            const durationEl = card.querySelector('.live-duration');
+            const stream = streamState.activeStreams[index];
+            if (durationEl && stream) durationEl.textContent = getLiveDuration(stream);
+        });
+    }
+
+    async function refreshDashboard() {
+        const icon = document.getElementById('refresh-icon');
+        if (icon) icon.classList.add('fa-spin');
+
+        try {
+            const response = await fetch('/api/system/stats', { cache: 'no-store' });
+            if (response.ok) {
+                const stats = await response.json();
+
+                const elUptime = document.getElementById('sys-uptime');
+                if (elUptime) elUptime.innerText = stats.uptime || 'N/A';
+
+                const elBotCount = document.getElementById('sys-bots-count');
+                if (elBotCount) elBotCount.innerText = stats.connected_bots ?? 0;
+
+                const elLive = document.getElementById('sys-live-streams');
+                if (elLive) elLive.innerText = stats.total_active_streams ?? 0;
+
+                const elVersion = document.getElementById('sys-version');
+                if (elVersion) elVersion.innerText = 'v' + (stats.version || '1.0.0');
+            }
+
+            await loadStreamStats();
+        } catch (error) {
+            console.error('Failed to refresh dashboard:', error);
+            showToast('Dashboard refresh failed.', 'error', 'Refresh failed');
+        } finally {
+            setTimeout(() => { if (icon) icon.classList.remove('fa-spin'); }, 450);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadStreamStats();
+        loadSetupStatus();
+        loadRecent();
+        setInterval(loadStreamStats, 30000);
+        setInterval(refreshLiveDurations, 1000);
+    });
+
+    async function loadSetupStatus() {
+        const wrap = document.getElementById('setup-card');
+        if (!wrap) return;
+        try {
+            const res = await fetch('/api/admin/setup-status');
+            if (!res.ok) return;
+            const data = await res.json();
+            const d = data.data || {};
+            const checks = d.checks || [];
+            if (!checks.length || d.complete) { wrap.innerHTML = ''; return; }
+
+            const rows = checks.map(c => `
+                <a href="/admin/settings" class="flex items-start gap-3 p-3 rounded-[14px] transition-colors hover:bg-surface ${c.done ? 'opacity-55' : ''}">
+                    <span class="mt-0.5 w-5 h-5 rounded-full grid place-items-center shrink-0 ${c.done ? 'bg-ok/15 text-ok' : 'border border-border text-text-secondary'}">
+                        <i class="fa-solid ${c.done ? 'fa-check' : 'fa-arrow-right'} text-[10px]"></i>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-sm font-medium ${c.done ? 'line-through text-text-secondary' : ''}">${escapeHtmlSetup(c.label)}</span>
+                        <span class="block text-[13px] text-text-secondary mt-0.5">${escapeHtmlSetup(c.hint)}</span>
+                    </span>
+                </a>`).join('');
+
+            const pct = Math.round((d.done / d.total) * 100);
+            wrap.innerHTML = `
+                <div class="glass-panel p-5">
+                    <div class="flex items-center justify-between gap-4">
+                        <div class="min-w-0">
+                            <h2 class="font-medium">Finish setting up</h2>
+                            <p class="text-sm text-text-secondary mt-0.5">${d.done} of ${d.total} steps done</p>
+                        </div>
+                        <span class="text-xl font-semibold text-primary tabular">${pct}%</span>
+                    </div>
+                    <div class="h-1.5 rounded-full bg-card-high overflow-hidden my-4"><div class="h-full rounded-full bg-primary transition-[width] duration-700" style="width:${pct}%"></div></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-1 -mx-1">${rows}</div>
+                </div>`;
+        } catch (e) { /* ignore */ }
+    }
+
+    function escapeHtmlSetup(v) {
+        return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+</script>
+{% endblock %}
